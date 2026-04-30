@@ -53,7 +53,7 @@ func createGateway() http.Handler {
 	ctx := context.Background()
 	mux := runtime.NewServeMux()
 
-	conn, err := grpc.DialContext(ctx,
+	conn, err := grpc.NewClient(
 		grpcPort,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(1024*1024)),
