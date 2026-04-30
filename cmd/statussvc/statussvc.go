@@ -25,7 +25,7 @@ func main() {
 	grpcServer := grpc.NewServer()
 
 	storage := storage.NewMemorySensorStorage()
-	statussvc := server.NewStatusServiceImpl(storage)
+	statussvc := server.NewStatusMonitorService(storage)
 	v1.RegisterStatusServiceServer(grpcServer, statussvc)
 
 	// Start gRPC server
