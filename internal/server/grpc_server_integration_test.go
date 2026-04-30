@@ -12,15 +12,15 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-func TestStatusServiceImpl_StartsWithoutPanic(t *testing.T) {
-	impl := NewStatusServiceImpl(storage.NewMemorySensorStorage())
+func TestStatusMonitorService_StartsWithoutPanic(t *testing.T) {
+	impl := NewStatusMonitorService(storage.NewMemorySensorStorage())
 
 	ctx := context.Background()
 
-	_, err := impl.QuerySensors(ctx, &v1.QuerySensorsRequest{Path: "/"})
+	_, err := impl.QuerySensors(ctx, &v1.QuerySensorsRequest{})
 
 	if err != nil {
-		t.Fatalf("Echo failed: %v", err)
+		t.Fatalf("Query failed: %v", err)
 	}
 }
 
@@ -32,7 +32,7 @@ func TestMockServerConnectivity(t *testing.T) {
 	defer listener.Close()
 
 	grpcServer := grpc.NewServer()
-	impl := NewStatusServiceImpl(storage.NewMemorySensorStorage())
+	impl := NewStatusMonitorService(storage.NewMemorySensorStorage())
 	v1.RegisterStatusServiceServer(grpcServer, impl)
 
 	go func() {

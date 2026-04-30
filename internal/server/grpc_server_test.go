@@ -10,13 +10,13 @@ import (
 )
 
 func TestServiceImplImplementsInterface(t *testing.T) {
-	var _ v1.StatusServiceServer = &StatusServiceImpl{}
-	assert.True(t, true, "StatusServiceImpl implements StatusServiceServer")
+	var _ v1.StatusServiceServer = &StatusMonitorService{}
+	assert.True(t, true, "StatusMonitorService implements StatusServiceServer")
 }
 
 func TestRegisterSensor_Duplicate(t *testing.T) {
 	storage := storage.NewMemorySensorStorage()
-	impl := NewStatusServiceImpl(storage)
+	impl := NewStatusMonitorService(storage)
 
 	sensor1 := &v1.SensorInfo{
 		SensorId:              "sensor-1",

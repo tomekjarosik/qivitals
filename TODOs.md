@@ -37,4 +37,7 @@ It must be HTTP gateway, with protobuf and gRPC, and postgres as backend for sto
 
 # TODOs
 
-[ ] Create initial structure with gRPC - HTTP-gRPC gateway and protobuf
+[ ] - add public key to SensorInfo
+[ ] - add sensor data evaluation function to SensorInfo - could be few predefined at first
+[ ] - add web UI to display statuses with URL query param to filter them
+[ ] - add functionality to make status "reviewed" / "casual"

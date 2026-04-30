@@ -9,18 +9,18 @@ import (
 	"github.com/tomekjarosik/one-status/internal/storage"
 )
 
-type StatusServiceImpl struct {
+type StatusMonitorService struct {
 	v1.UnimplementedStatusServiceServer
 	storage storage.SensorStorage
 }
 
-func NewStatusServiceImpl(storage storage.SensorStorage) *StatusServiceImpl {
-	return &StatusServiceImpl{
+func NewStatusMonitorService(storage storage.SensorStorage) *StatusMonitorService {
+	return &StatusMonitorService{
 		storage: storage,
 	}
 }
 
-func (s *StatusServiceImpl) RegisterSensor(ctx context.Context, req *v1.RegisterSensorRequest) (*v1.RegisterSensorResponse, error) {
+func (s *StatusMonitorService) RegisterSensor(ctx context.Context, req *v1.RegisterSensorRequest) (*v1.RegisterSensorResponse, error) {
 	sensor := &storage.SensorInfo{
 		ID:             req.Sensor.SensorId,
 		Name:           req.Sensor.SensorName,
@@ -54,7 +54,7 @@ func (s *StatusServiceImpl) RegisterSensor(ctx context.Context, req *v1.Register
 	}, nil
 }
 
-func (s *StatusServiceImpl) SendSensorData(ctx context.Context, req *v1.SendSensorDataRequest) (*v1.SendSensorDataResponse, error) {
+func (s *StatusMonitorService) SendSensorData(ctx context.Context, req *v1.SendSensorDataRequest) (*v1.SendSensorDataResponse, error) {
 	if err := s.storage.SendData(req.SensorId, req.Ok); err != nil {
 		if _, ok := err.(*storage.SensorNotFoundError); ok {
 			timestamp := time.Now().Unix()
@@ -75,7 +75,7 @@ func (s *StatusServiceImpl) SendSensorData(ctx context.Context, req *v1.SendSens
 	}, nil
 }
 
-func (s *StatusServiceImpl) QuerySensors(ctx context.Context, req *v1.QuerySensorsRequest) (*v1.QuerySensorsResponse, error) {
+func (s *StatusMonitorService) QuerySensors(ctx context.Context, req *v1.QuerySensorsRequest) (*v1.QuerySensorsResponse, error) {
 	sensorIDs, err := s.storage.QueryByPath(req.Path)
 	if err != nil {
 		return nil, err

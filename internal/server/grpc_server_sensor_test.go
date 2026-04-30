@@ -12,7 +12,7 @@ import (
 
 func TestRegisterSensor_New(t *testing.T) {
 	strg := storage.NewMemorySensorStorage()
-	impl := NewStatusServiceImpl(strg)
+	impl := NewStatusMonitorService(strg)
 
 	sensor := &v1.SensorInfo{
 		SensorId:              "sensor-1",
@@ -37,7 +37,7 @@ func TestRegisterSensor_New(t *testing.T) {
 
 func TestRegisterSensor_EmptySensorID(t *testing.T) {
 	strg := storage.NewMemorySensorStorage()
-	impl := NewStatusServiceImpl(strg)
+	impl := NewStatusMonitorService(strg)
 
 	req := &v1.RegisterSensorRequest{
 		Sensor: &v1.SensorInfo{
@@ -53,7 +53,7 @@ func TestRegisterSensor_EmptySensorID(t *testing.T) {
 
 func TestSendSensorData(t *testing.T) {
 	strg := storage.NewMemorySensorStorage()
-	impl := NewStatusServiceImpl(strg)
+	impl := NewStatusMonitorService(strg)
 
 	// Register first
 	sensor := &v1.SensorInfo{
@@ -91,7 +91,7 @@ func TestSendSensorData(t *testing.T) {
 
 func TestSendSensorData_NonExistent(t *testing.T) {
 	strg := storage.NewMemorySensorStorage()
-	impl := NewStatusServiceImpl(strg)
+	impl := NewStatusMonitorService(strg)
 
 	req := &v1.SendSensorDataRequest{
 		SensorId: "non-existent",
@@ -107,7 +107,7 @@ func TestSendSensorData_NonExistent(t *testing.T) {
 
 func TestQuerySensors(t *testing.T) {
 	strg := storage.NewMemorySensorStorage()
-	impl := NewStatusServiceImpl(strg)
+	impl := NewStatusMonitorService(strg)
 
 	// Register multiple sensors
 	for i := 1; i <= 5; i++ {
@@ -162,7 +162,7 @@ func TestQuerySensors(t *testing.T) {
 
 func TestQuerySensors_ByPath(t *testing.T) {
 	strg := storage.NewMemorySensorStorage()
-	impl := NewStatusServiceImpl(strg)
+	impl := NewStatusMonitorService(strg)
 
 	// Register sensors with different patterns
 	sensors := []*v1.SensorInfo{
@@ -232,7 +232,7 @@ func TestQuerySensors_ByPath(t *testing.T) {
 
 func TestQuerySensors_ByLabels(t *testing.T) {
 	strg := storage.NewMemorySensorStorage()
-	impl := NewStatusServiceImpl(strg)
+	impl := NewStatusMonitorService(strg)
 
 	// Register sensors with different labels
 	sensors := []*v1.SensorInfo{
@@ -373,7 +373,7 @@ func TestStatusCalculation(t *testing.T) {
 
 func TestRegisterSensor_InvalidPeriods(t *testing.T) {
 	storage := storage.NewMemorySensorStorage()
-	impl := NewStatusServiceImpl(storage)
+	impl := NewStatusMonitorService(storage)
 
 	tests := []struct {
 		name        string
