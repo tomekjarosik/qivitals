@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc/grpclog"
 
 	"github.com/tomekjarosik/one-status/internal/server"
+	"github.com/tomekjarosik/one-status/internal/storage"
 )
 
 const (
@@ -23,7 +24,8 @@ const (
 func main() {
 	grpcServer := grpc.NewServer()
 
-	statussvc := &server.StatusServiceImpl{}
+	storage := storage.NewMemorySensorStorage()
+	statussvc := server.NewStatusServiceImpl(storage)
 	v1.RegisterStatusServiceServer(grpcServer, statussvc)
 
 	// Start gRPC server

@@ -7,18 +7,17 @@ import (
 	"time"
 
 	"github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
+	"github.com/tomekjarosik/one-status/internal/storage"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
 func TestStatusServiceImpl_StartsWithoutPanic(t *testing.T) {
-	impl := &StatusServiceImpl{}
+	impl := NewStatusServiceImpl(storage.NewMemorySensorStorage())
 
 	ctx := context.Background()
 
-	_, err := impl.Echo(ctx, &v1.EchoRequest{
-		Message: "test",
-	})
+	_, err := impl.QuerySensors(ctx, &v1.QuerySensorsRequest{Path: "/"})
 
 	if err != nil {
 		t.Fatalf("Echo failed: %v", err)
@@ -33,7 +32,7 @@ func TestMockServerConnectivity(t *testing.T) {
 	defer listener.Close()
 
 	grpcServer := grpc.NewServer()
-	impl := &StatusServiceImpl{}
+	impl := NewStatusServiceImpl(storage.NewMemorySensorStorage())
 	v1.RegisterStatusServiceServer(grpcServer, impl)
 
 	go func() {
@@ -61,15 +60,9 @@ func TestMockServerConnectivity(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	resp, err := client.Echo(ctx, &v1.EchoRequest{
-		Message: "test connectivity",
-	})
+	_, err = client.QuerySensors(ctx, &v1.QuerySensorsRequest{})
 
 	if err != nil {
 		t.Fatalf("Failed to call Echo: %v", err)
-	}
-
-	if resp.Message != "test connectivity" || resp.Timestamp == 0 {
-		t.Errorf("Unexpected response: %+v", resp)
 	}
 }

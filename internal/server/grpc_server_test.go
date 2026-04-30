@@ -3,65 +3,40 @@ package server
 import (
 	"context"
 	"testing"
-	"time"
 
-	"github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
 	"github.com/stretchr/testify/assert"
+	"github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
+	"github.com/tomekjarosik/one-status/internal/storage"
 )
-
-func TestEcho(t *testing.T) {
-	tests := []struct {
-		name        string
-		input       *v1.EchoRequest
-		expectError bool
-	}{
-		{
-			name: "with message",
-			input: &v1.EchoRequest{
-				Message: "hello",
-			},
-			expectError: false,
-		},
-		{
-			name: "empty message",
-			input: &v1.EchoRequest{
-				Message: "",
-			},
-			expectError: false,
-		},
-		{
-			name: "long message",
-			input: &v1.EchoRequest{
-				Message: "this is a pretty long message for testing purposes",
-			},
-			expectError: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			impl := &StatusServiceImpl{}
-
-			ctx := context.Background()
-			resp, err := impl.Echo(ctx, tt.input)
-
-			assert := assert.New(t)
-
-			if !tt.expectError {
-				assert.NoError(err)
-				assert.Equal(tt.input.Message, resp.Message)
-				assert.NotZero(resp.Timestamp)
-				assert.True(resp.Timestamp >= time.Now().Add(-1*time.Second).Unix())
-				assert.True(resp.Timestamp <= time.Now().Add(1*time.Second).Unix())
-			} else {
-				assert.Error(err)
-				assert.Nil(resp)
-			}
-		})
-	}
-}
 
 func TestServiceImplImplementsInterface(t *testing.T) {
 	var _ v1.StatusServiceServer = &StatusServiceImpl{}
 	assert.True(t, true, "StatusServiceImpl implements StatusServiceServer")
+}
+
+func TestRegisterSensor_Duplicate(t *testing.T) {
+	storage := storage.NewMemorySensorStorage()
+	impl := NewStatusServiceImpl(storage)
+
+	sensor1 := &v1.SensorInfo{
+		SensorId:              "sensor-1",
+		SensorName:            "Sensor One",
+		Description:           "First sensor",
+		GracefulPeriodSeconds: 60,
+		FailurePeriodSeconds:  120,
+	}
+
+	req1 := &v1.RegisterSensorRequest{Sensor: sensor1}
+	resp1, err := impl.RegisterSensor(context.Background(), req1)
+
+	assert.NoError(t, err)
+	assert.True(t, resp1.Success)
+	assert.Equal(t, "sensor-1", resp1.SensorId)
+
+	req2 := &v1.RegisterSensorRequest{Sensor: sensor1}
+	resp2, err := impl.RegisterSensor(context.Background(), req2)
+
+	assert.Error(t, err)
+	assert.False(t, resp2.Success)
+	assert.Equal(t, "sensor-1", resp2.SensorId)
 }

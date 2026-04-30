@@ -19,14 +19,18 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	StatusService_Echo_FullMethodName = "/statussvc.v1.StatusService/Echo"
+	StatusService_RegisterSensor_FullMethodName = "/statussvc.v1.StatusService/RegisterSensor"
+	StatusService_QuerySensors_FullMethodName   = "/statussvc.v1.StatusService/QuerySensors"
+	StatusService_SendSensorData_FullMethodName = "/statussvc.v1.StatusService/SendSensorData"
 )
 
 // StatusServiceClient is the client API for StatusService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type StatusServiceClient interface {
-	Echo(ctx context.Context, in *EchoRequest, opts ...grpc.CallOption) (*EchoResponse, error)
+	RegisterSensor(ctx context.Context, in *RegisterSensorRequest, opts ...grpc.CallOption) (*RegisterSensorResponse, error)
+	QuerySensors(ctx context.Context, in *QuerySensorsRequest, opts ...grpc.CallOption) (*QuerySensorsResponse, error)
+	SendSensorData(ctx context.Context, in *SendSensorDataRequest, opts ...grpc.CallOption) (*SendSensorDataResponse, error)
 }
 
 type statusServiceClient struct {
@@ -37,10 +41,30 @@ func NewStatusServiceClient(cc grpc.ClientConnInterface) StatusServiceClient {
 	return &statusServiceClient{cc}
 }
 
-func (c *statusServiceClient) Echo(ctx context.Context, in *EchoRequest, opts ...grpc.CallOption) (*EchoResponse, error) {
+func (c *statusServiceClient) RegisterSensor(ctx context.Context, in *RegisterSensorRequest, opts ...grpc.CallOption) (*RegisterSensorResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(EchoResponse)
-	err := c.cc.Invoke(ctx, StatusService_Echo_FullMethodName, in, out, cOpts...)
+	out := new(RegisterSensorResponse)
+	err := c.cc.Invoke(ctx, StatusService_RegisterSensor_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *statusServiceClient) QuerySensors(ctx context.Context, in *QuerySensorsRequest, opts ...grpc.CallOption) (*QuerySensorsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(QuerySensorsResponse)
+	err := c.cc.Invoke(ctx, StatusService_QuerySensors_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *statusServiceClient) SendSensorData(ctx context.Context, in *SendSensorDataRequest, opts ...grpc.CallOption) (*SendSensorDataResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SendSensorDataResponse)
+	err := c.cc.Invoke(ctx, StatusService_SendSensorData_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +75,9 @@ func (c *statusServiceClient) Echo(ctx context.Context, in *EchoRequest, opts ..
 // All implementations must embed UnimplementedStatusServiceServer
 // for forward compatibility.
 type StatusServiceServer interface {
-	Echo(context.Context, *EchoRequest) (*EchoResponse, error)
+	RegisterSensor(context.Context, *RegisterSensorRequest) (*RegisterSensorResponse, error)
+	QuerySensors(context.Context, *QuerySensorsRequest) (*QuerySensorsResponse, error)
+	SendSensorData(context.Context, *SendSensorDataRequest) (*SendSensorDataResponse, error)
 	mustEmbedUnimplementedStatusServiceServer()
 }
 
@@ -62,8 +88,14 @@ type StatusServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedStatusServiceServer struct{}
 
-func (UnimplementedStatusServiceServer) Echo(context.Context, *EchoRequest) (*EchoResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method Echo not implemented")
+func (UnimplementedStatusServiceServer) RegisterSensor(context.Context, *RegisterSensorRequest) (*RegisterSensorResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RegisterSensor not implemented")
+}
+func (UnimplementedStatusServiceServer) QuerySensors(context.Context, *QuerySensorsRequest) (*QuerySensorsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method QuerySensors not implemented")
+}
+func (UnimplementedStatusServiceServer) SendSensorData(context.Context, *SendSensorDataRequest) (*SendSensorDataResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SendSensorData not implemented")
 }
 func (UnimplementedStatusServiceServer) mustEmbedUnimplementedStatusServiceServer() {}
 func (UnimplementedStatusServiceServer) testEmbeddedByValue()                       {}
@@ -86,20 +118,56 @@ func RegisterStatusServiceServer(s grpc.ServiceRegistrar, srv StatusServiceServe
 	s.RegisterService(&StatusService_ServiceDesc, srv)
 }
 
-func _StatusService_Echo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(EchoRequest)
+func _StatusService_RegisterSensor_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterSensorRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(StatusServiceServer).Echo(ctx, in)
+		return srv.(StatusServiceServer).RegisterSensor(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: StatusService_Echo_FullMethodName,
+		FullMethod: StatusService_RegisterSensor_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(StatusServiceServer).Echo(ctx, req.(*EchoRequest))
+		return srv.(StatusServiceServer).RegisterSensor(ctx, req.(*RegisterSensorRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _StatusService_QuerySensors_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QuerySensorsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StatusServiceServer).QuerySensors(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StatusService_QuerySensors_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StatusServiceServer).QuerySensors(ctx, req.(*QuerySensorsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _StatusService_SendSensorData_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SendSensorDataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StatusServiceServer).SendSensorData(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StatusService_SendSensorData_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StatusServiceServer).SendSensorData(ctx, req.(*SendSensorDataRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -112,8 +180,16 @@ var StatusService_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*StatusServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "Echo",
-			Handler:    _StatusService_Echo_Handler,
+			MethodName: "RegisterSensor",
+			Handler:    _StatusService_RegisterSensor_Handler,
+		},
+		{
+			MethodName: "QuerySensors",
+			Handler:    _StatusService_QuerySensors_Handler,
+		},
+		{
+			MethodName: "SendSensorData",
+			Handler:    _StatusService_SendSensorData_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

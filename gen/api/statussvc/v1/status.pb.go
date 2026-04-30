@@ -22,27 +22,28 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type EchoRequest struct {
+type Label struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Value         string                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *EchoRequest) Reset() {
-	*x = EchoRequest{}
+func (x *Label) Reset() {
+	*x = Label{}
 	mi := &file_api_statussvc_v1_status_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *EchoRequest) String() string {
+func (x *Label) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*EchoRequest) ProtoMessage() {}
+func (*Label) ProtoMessage() {}
 
-func (x *EchoRequest) ProtoReflect() protoreflect.Message {
+func (x *Label) ProtoReflect() protoreflect.Message {
 	mi := &file_api_statussvc_v1_status_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -54,40 +55,51 @@ func (x *EchoRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use EchoRequest.ProtoReflect.Descriptor instead.
-func (*EchoRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use Label.ProtoReflect.Descriptor instead.
+func (*Label) Descriptor() ([]byte, []int) {
 	return file_api_statussvc_v1_status_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *EchoRequest) GetMessage() string {
+func (x *Label) GetKey() string {
 	if x != nil {
-		return x.Message
+		return x.Key
 	}
 	return ""
 }
 
-type EchoResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
-	Timestamp     int64                  `protobuf:"varint,2,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+func (x *Label) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
 }
 
-func (x *EchoResponse) Reset() {
-	*x = EchoResponse{}
+type SensorInfo struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	SensorId              string                 `protobuf:"bytes,1,opt,name=sensor_id,json=sensorId,proto3" json:"sensor_id,omitempty"`
+	SensorName            string                 `protobuf:"bytes,2,opt,name=sensor_name,json=sensorName,proto3" json:"sensor_name,omitempty"`
+	Description           string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	GracefulPeriodSeconds int64                  `protobuf:"varint,4,opt,name=graceful_period_seconds,json=gracefulPeriodSeconds,proto3" json:"graceful_period_seconds,omitempty"`
+	FailurePeriodSeconds  int64                  `protobuf:"varint,5,opt,name=failure_period_seconds,json=failurePeriodSeconds,proto3" json:"failure_period_seconds,omitempty"`
+	Labels                []*Label               `protobuf:"bytes,6,rep,name=labels,proto3" json:"labels,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *SensorInfo) Reset() {
+	*x = SensorInfo{}
 	mi := &file_api_statussvc_v1_status_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *EchoResponse) String() string {
+func (x *SensorInfo) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*EchoResponse) ProtoMessage() {}
+func (*SensorInfo) ProtoMessage() {}
 
-func (x *EchoResponse) ProtoReflect() protoreflect.Message {
+func (x *SensorInfo) ProtoReflect() protoreflect.Message {
 	mi := &file_api_statussvc_v1_status_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -99,37 +111,486 @@ func (x *EchoResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use EchoResponse.ProtoReflect.Descriptor instead.
-func (*EchoResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use SensorInfo.ProtoReflect.Descriptor instead.
+func (*SensorInfo) Descriptor() ([]byte, []int) {
 	return file_api_statussvc_v1_status_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *EchoResponse) GetMessage() string {
+func (x *SensorInfo) GetSensorId() string {
 	if x != nil {
-		return x.Message
+		return x.SensorId
 	}
 	return ""
 }
 
-func (x *EchoResponse) GetTimestamp() int64 {
+func (x *SensorInfo) GetSensorName() string {
+	if x != nil {
+		return x.SensorName
+	}
+	return ""
+}
+
+func (x *SensorInfo) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *SensorInfo) GetGracefulPeriodSeconds() int64 {
+	if x != nil {
+		return x.GracefulPeriodSeconds
+	}
+	return 0
+}
+
+func (x *SensorInfo) GetFailurePeriodSeconds() int64 {
+	if x != nil {
+		return x.FailurePeriodSeconds
+	}
+	return 0
+}
+
+func (x *SensorInfo) GetLabels() []*Label {
+	if x != nil {
+		return x.Labels
+	}
+	return nil
+}
+
+type RegisterSensorRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Sensor        *SensorInfo            `protobuf:"bytes,1,opt,name=sensor,proto3" json:"sensor,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisterSensorRequest) Reset() {
+	*x = RegisterSensorRequest{}
+	mi := &file_api_statussvc_v1_status_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterSensorRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterSensorRequest) ProtoMessage() {}
+
+func (x *RegisterSensorRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_statussvc_v1_status_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterSensorRequest.ProtoReflect.Descriptor instead.
+func (*RegisterSensorRequest) Descriptor() ([]byte, []int) {
+	return file_api_statussvc_v1_status_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *RegisterSensorRequest) GetSensor() *SensorInfo {
+	if x != nil {
+		return x.Sensor
+	}
+	return nil
+}
+
+type RegisterSensorResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SensorId      string                 `protobuf:"bytes,1,opt,name=sensor_id,json=sensorId,proto3" json:"sensor_id,omitempty"`
+	Success       bool                   `protobuf:"varint,2,opt,name=success,proto3" json:"success,omitempty"`
+	Timestamp     int64                  `protobuf:"varint,3,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisterSensorResponse) Reset() {
+	*x = RegisterSensorResponse{}
+	mi := &file_api_statussvc_v1_status_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterSensorResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterSensorResponse) ProtoMessage() {}
+
+func (x *RegisterSensorResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_statussvc_v1_status_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterSensorResponse.ProtoReflect.Descriptor instead.
+func (*RegisterSensorResponse) Descriptor() ([]byte, []int) {
+	return file_api_statussvc_v1_status_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *RegisterSensorResponse) GetSensorId() string {
+	if x != nil {
+		return x.SensorId
+	}
+	return ""
+}
+
+func (x *RegisterSensorResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *RegisterSensorResponse) GetTimestamp() int64 {
 	if x != nil {
 		return x.Timestamp
 	}
 	return 0
 }
 
+type SendSensorDataRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SensorId      string                 `protobuf:"bytes,1,opt,name=sensor_id,json=sensorId,proto3" json:"sensor_id,omitempty"`
+	Ok            bool                   `protobuf:"varint,2,opt,name=ok,proto3" json:"ok,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SendSensorDataRequest) Reset() {
+	*x = SendSensorDataRequest{}
+	mi := &file_api_statussvc_v1_status_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SendSensorDataRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SendSensorDataRequest) ProtoMessage() {}
+
+func (x *SendSensorDataRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_statussvc_v1_status_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SendSensorDataRequest.ProtoReflect.Descriptor instead.
+func (*SendSensorDataRequest) Descriptor() ([]byte, []int) {
+	return file_api_statussvc_v1_status_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *SendSensorDataRequest) GetSensorId() string {
+	if x != nil {
+		return x.SensorId
+	}
+	return ""
+}
+
+func (x *SendSensorDataRequest) GetOk() bool {
+	if x != nil {
+		return x.Ok
+	}
+	return false
+}
+
+type SendSensorDataResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SensorId      string                 `protobuf:"bytes,1,opt,name=sensor_id,json=sensorId,proto3" json:"sensor_id,omitempty"`
+	Success       bool                   `protobuf:"varint,2,opt,name=success,proto3" json:"success,omitempty"`
+	Timestamp     int64                  `protobuf:"varint,3,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SendSensorDataResponse) Reset() {
+	*x = SendSensorDataResponse{}
+	mi := &file_api_statussvc_v1_status_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SendSensorDataResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SendSensorDataResponse) ProtoMessage() {}
+
+func (x *SendSensorDataResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_statussvc_v1_status_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SendSensorDataResponse.ProtoReflect.Descriptor instead.
+func (*SendSensorDataResponse) Descriptor() ([]byte, []int) {
+	return file_api_statussvc_v1_status_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *SendSensorDataResponse) GetSensorId() string {
+	if x != nil {
+		return x.SensorId
+	}
+	return ""
+}
+
+func (x *SendSensorDataResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *SendSensorDataResponse) GetTimestamp() int64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
+type SensorStatus struct {
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	SensorId             string                 `protobuf:"bytes,1,opt,name=sensor_id,json=sensorId,proto3" json:"sensor_id,omitempty"`
+	Status               string                 `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"`
+	LastOkTimestamp      int64                  `protobuf:"varint,3,opt,name=last_ok_timestamp,json=lastOkTimestamp,proto3" json:"last_ok_timestamp,omitempty"`
+	LastUpdatedTimestamp int64                  `protobuf:"varint,4,opt,name=last_updated_timestamp,json=lastUpdatedTimestamp,proto3" json:"last_updated_timestamp,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *SensorStatus) Reset() {
+	*x = SensorStatus{}
+	mi := &file_api_statussvc_v1_status_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SensorStatus) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SensorStatus) ProtoMessage() {}
+
+func (x *SensorStatus) ProtoReflect() protoreflect.Message {
+	mi := &file_api_statussvc_v1_status_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SensorStatus.ProtoReflect.Descriptor instead.
+func (*SensorStatus) Descriptor() ([]byte, []int) {
+	return file_api_statussvc_v1_status_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *SensorStatus) GetSensorId() string {
+	if x != nil {
+		return x.SensorId
+	}
+	return ""
+}
+
+func (x *SensorStatus) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *SensorStatus) GetLastOkTimestamp() int64 {
+	if x != nil {
+		return x.LastOkTimestamp
+	}
+	return 0
+}
+
+func (x *SensorStatus) GetLastUpdatedTimestamp() int64 {
+	if x != nil {
+		return x.LastUpdatedTimestamp
+	}
+	return 0
+}
+
+type QuerySensorsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Labels        []*Label               `protobuf:"bytes,2,rep,name=labels,proto3" json:"labels,omitempty"`
+	Status        string                 `protobuf:"bytes,3,opt,name=status,proto3" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QuerySensorsRequest) Reset() {
+	*x = QuerySensorsRequest{}
+	mi := &file_api_statussvc_v1_status_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QuerySensorsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QuerySensorsRequest) ProtoMessage() {}
+
+func (x *QuerySensorsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_statussvc_v1_status_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QuerySensorsRequest.ProtoReflect.Descriptor instead.
+func (*QuerySensorsRequest) Descriptor() ([]byte, []int) {
+	return file_api_statussvc_v1_status_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *QuerySensorsRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *QuerySensorsRequest) GetLabels() []*Label {
+	if x != nil {
+		return x.Labels
+	}
+	return nil
+}
+
+func (x *QuerySensorsRequest) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+type QuerySensorsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Sensors       []*SensorStatus        `protobuf:"bytes,1,rep,name=sensors,proto3" json:"sensors,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QuerySensorsResponse) Reset() {
+	*x = QuerySensorsResponse{}
+	mi := &file_api_statussvc_v1_status_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QuerySensorsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QuerySensorsResponse) ProtoMessage() {}
+
+func (x *QuerySensorsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_statussvc_v1_status_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QuerySensorsResponse.ProtoReflect.Descriptor instead.
+func (*QuerySensorsResponse) Descriptor() ([]byte, []int) {
+	return file_api_statussvc_v1_status_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *QuerySensorsResponse) GetSensors() []*SensorStatus {
+	if x != nil {
+		return x.Sensors
+	}
+	return nil
+}
+
 var File_api_statussvc_v1_status_proto protoreflect.FileDescriptor
 
 const file_api_statussvc_v1_status_proto_rawDesc = "" +
 	"\n" +
-	"\x1dapi/statussvc/v1/status.proto\x12\fstatussvc.v1\x1a\x1cgoogle/api/annotations.proto\"'\n" +
-	"\vEchoRequest\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage\"F\n" +
-	"\fEchoResponse\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage\x12\x1c\n" +
-	"\ttimestamp\x18\x02 \x01(\x03R\ttimestamp2g\n" +
-	"\rStatusService\x12V\n" +
-	"\x04Echo\x12\x19.statussvc.v1.EchoRequest\x1a\x1a.statussvc.v1.EchoResponse\"\x17\x82\xd3\xe4\x93\x02\x11:\x01*\"\f/api/v1/echoB5Z3github.com/tomekjarosik/one-status/api/statussvc/v1b\x06proto3"
+	"\x1dapi/statussvc/v1/status.proto\x12\fstatussvc.v1\x1a\x1cgoogle/api/annotations.proto\"/\n" +
+	"\x05Label\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value\"\x87\x02\n" +
+	"\n" +
+	"SensorInfo\x12\x1b\n" +
+	"\tsensor_id\x18\x01 \x01(\tR\bsensorId\x12\x1f\n" +
+	"\vsensor_name\x18\x02 \x01(\tR\n" +
+	"sensorName\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x126\n" +
+	"\x17graceful_period_seconds\x18\x04 \x01(\x03R\x15gracefulPeriodSeconds\x124\n" +
+	"\x16failure_period_seconds\x18\x05 \x01(\x03R\x14failurePeriodSeconds\x12+\n" +
+	"\x06labels\x18\x06 \x03(\v2\x13.statussvc.v1.LabelR\x06labels\"I\n" +
+	"\x15RegisterSensorRequest\x120\n" +
+	"\x06sensor\x18\x01 \x01(\v2\x18.statussvc.v1.SensorInfoR\x06sensor\"m\n" +
+	"\x16RegisterSensorResponse\x12\x1b\n" +
+	"\tsensor_id\x18\x01 \x01(\tR\bsensorId\x12\x18\n" +
+	"\asuccess\x18\x02 \x01(\bR\asuccess\x12\x1c\n" +
+	"\ttimestamp\x18\x03 \x01(\x03R\ttimestamp\"D\n" +
+	"\x15SendSensorDataRequest\x12\x1b\n" +
+	"\tsensor_id\x18\x01 \x01(\tR\bsensorId\x12\x0e\n" +
+	"\x02ok\x18\x02 \x01(\bR\x02ok\"m\n" +
+	"\x16SendSensorDataResponse\x12\x1b\n" +
+	"\tsensor_id\x18\x01 \x01(\tR\bsensorId\x12\x18\n" +
+	"\asuccess\x18\x02 \x01(\bR\asuccess\x12\x1c\n" +
+	"\ttimestamp\x18\x03 \x01(\x03R\ttimestamp\"\xa5\x01\n" +
+	"\fSensorStatus\x12\x1b\n" +
+	"\tsensor_id\x18\x01 \x01(\tR\bsensorId\x12\x16\n" +
+	"\x06status\x18\x02 \x01(\tR\x06status\x12*\n" +
+	"\x11last_ok_timestamp\x18\x03 \x01(\x03R\x0flastOkTimestamp\x124\n" +
+	"\x16last_updated_timestamp\x18\x04 \x01(\x03R\x14lastUpdatedTimestamp\"n\n" +
+	"\x13QuerySensorsRequest\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12+\n" +
+	"\x06labels\x18\x02 \x03(\v2\x13.statussvc.v1.LabelR\x06labels\x12\x16\n" +
+	"\x06status\x18\x03 \x01(\tR\x06status\"L\n" +
+	"\x14QuerySensorsResponse\x124\n" +
+	"\asensors\x18\x01 \x03(\v2\x1a.statussvc.v1.SensorStatusR\asensors2\xf5\x02\n" +
+	"\rStatusService\x12w\n" +
+	"\x0eRegisterSensor\x12#.statussvc.v1.RegisterSensorRequest\x1a$.statussvc.v1.RegisterSensorResponse\"\x1a\x82\xd3\xe4\x93\x02\x14:\x01*\"\x0f/api/v1/sensors\x12n\n" +
+	"\fQuerySensors\x12!.statussvc.v1.QuerySensorsRequest\x1a\".statussvc.v1.QuerySensorsResponse\"\x17\x82\xd3\xe4\x93\x02\x11\x12\x0f/api/v1/sensors\x12{\n" +
+	"\x0eSendSensorData\x12#.statussvc.v1.SendSensorDataRequest\x1a$.statussvc.v1.SendSensorDataResponse\"\x1e\x82\xd3\xe4\x93\x02\x18:\x01*\"\x13/api/v1/sensor/dataB5Z3github.com/tomekjarosik/one-status/api/statussvc/v1b\x06proto3"
 
 var (
 	file_api_statussvc_v1_status_proto_rawDescOnce sync.Once
@@ -143,19 +604,34 @@ func file_api_statussvc_v1_status_proto_rawDescGZIP() []byte {
 	return file_api_statussvc_v1_status_proto_rawDescData
 }
 
-var file_api_statussvc_v1_status_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_api_statussvc_v1_status_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_api_statussvc_v1_status_proto_goTypes = []any{
-	(*EchoRequest)(nil),  // 0: statussvc.v1.EchoRequest
-	(*EchoResponse)(nil), // 1: statussvc.v1.EchoResponse
+	(*Label)(nil),                  // 0: statussvc.v1.Label
+	(*SensorInfo)(nil),             // 1: statussvc.v1.SensorInfo
+	(*RegisterSensorRequest)(nil),  // 2: statussvc.v1.RegisterSensorRequest
+	(*RegisterSensorResponse)(nil), // 3: statussvc.v1.RegisterSensorResponse
+	(*SendSensorDataRequest)(nil),  // 4: statussvc.v1.SendSensorDataRequest
+	(*SendSensorDataResponse)(nil), // 5: statussvc.v1.SendSensorDataResponse
+	(*SensorStatus)(nil),           // 6: statussvc.v1.SensorStatus
+	(*QuerySensorsRequest)(nil),    // 7: statussvc.v1.QuerySensorsRequest
+	(*QuerySensorsResponse)(nil),   // 8: statussvc.v1.QuerySensorsResponse
 }
 var file_api_statussvc_v1_status_proto_depIdxs = []int32{
-	0, // 0: statussvc.v1.StatusService.Echo:input_type -> statussvc.v1.EchoRequest
-	1, // 1: statussvc.v1.StatusService.Echo:output_type -> statussvc.v1.EchoResponse
-	1, // [1:2] is the sub-list for method output_type
-	0, // [0:1] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	0, // 0: statussvc.v1.SensorInfo.labels:type_name -> statussvc.v1.Label
+	1, // 1: statussvc.v1.RegisterSensorRequest.sensor:type_name -> statussvc.v1.SensorInfo
+	0, // 2: statussvc.v1.QuerySensorsRequest.labels:type_name -> statussvc.v1.Label
+	6, // 3: statussvc.v1.QuerySensorsResponse.sensors:type_name -> statussvc.v1.SensorStatus
+	2, // 4: statussvc.v1.StatusService.RegisterSensor:input_type -> statussvc.v1.RegisterSensorRequest
+	7, // 5: statussvc.v1.StatusService.QuerySensors:input_type -> statussvc.v1.QuerySensorsRequest
+	4, // 6: statussvc.v1.StatusService.SendSensorData:input_type -> statussvc.v1.SendSensorDataRequest
+	3, // 7: statussvc.v1.StatusService.RegisterSensor:output_type -> statussvc.v1.RegisterSensorResponse
+	8, // 8: statussvc.v1.StatusService.QuerySensors:output_type -> statussvc.v1.QuerySensorsResponse
+	5, // 9: statussvc.v1.StatusService.SendSensorData:output_type -> statussvc.v1.SendSensorDataResponse
+	7, // [7:10] is the sub-list for method output_type
+	4, // [4:7] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_api_statussvc_v1_status_proto_init() }
@@ -169,7 +645,7 @@ func file_api_statussvc_v1_status_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_statussvc_v1_status_proto_rawDesc), len(file_api_statussvc_v1_status_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
