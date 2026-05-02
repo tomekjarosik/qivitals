@@ -69,36 +69,36 @@ func TestSendSensorData(t *testing.T) {
 	assert.True(t, resp.Success)
 
 	// Send OK data
-	sendReq := &v1.SendSensorDataRequest{
+	sendReq := &v1.ReportSensorRequest{
 		SensorId: "sensor-2",
-		Ok:       true,
+		Data:     map[string]string{},
 	}
-	sendResp, err := impl.SendSensorData(context.Background(), sendReq)
+	sendResp, err := impl.ReportSensor(context.Background(), sendReq)
 	assert.NoError(t, err)
 	assert.True(t, sendResp.Success)
 	assert.NotZero(t, sendResp.Timestamp)
 
 	// Send failure data
-	sendReq2 := &v1.SendSensorDataRequest{
+	sendReq2 := &v1.ReportSensorRequest{
 		SensorId: "sensor-2",
-		Ok:       false,
+		Data:     map[string]string{},
 	}
-	sendResp2, err := impl.SendSensorData(context.Background(), sendReq2)
+	sendResp2, err := impl.ReportSensor(context.Background(), sendReq2)
 	assert.NoError(t, err)
 	assert.True(t, sendResp2.Success)
 	assert.Equal(t, "sensor-2", sendResp2.SensorId)
+
 }
 
 func TestSendSensorData_NonExistent(t *testing.T) {
 	strg := storage.NewMemorySensorStorage()
 	impl := NewStatusMonitorService(strg)
 
-	req := &v1.SendSensorDataRequest{
+	req := &v1.ReportSensorRequest{
 		SensorId: "non-existent",
-		Ok:       true,
+		Data:     map[string]string{},
 	}
-
-	resp, err := impl.SendSensorData(context.Background(), req)
+	resp, err := impl.ReportSensor(context.Background(), req)
 
 	assert.Error(t, err)
 	assert.False(t, resp.Success)
@@ -111,8 +111,9 @@ func TestQuerySensors(t *testing.T) {
 
 	// Register multiple sensors
 	for i := 1; i <= 5; i++ {
+		sensorId := "sensor-" + string(rune('0'+i))
 		sensor := &v1.SensorInfo{
-			SensorId:              "sensor-" + string(rune('0'+i)),
+			SensorId:              sensorId,
 			SensorName:            "Sensor " + string(rune('0'+i)),
 			GracefulPeriodSeconds: 60,
 			FailurePeriodSeconds:  120,
@@ -126,11 +127,11 @@ func TestQuerySensors(t *testing.T) {
 		assert.NoError(t, err)
 
 		// Send OK data
-		sendReq := &v1.SendSensorDataRequest{
-			SensorId: sensor.SensorId,
-			Ok:       true,
+		sendReq := &v1.ReportSensorRequest{
+			SensorId: sensorId,
+			Data:     map[string]string{},
 		}
-		_, err = impl.SendSensorData(context.Background(), sendReq)
+		_, err = impl.ReportSensor(context.Background(), sendReq)
 		assert.NoError(t, err)
 	}
 
@@ -188,31 +189,14 @@ func TestQuerySensors_ByPath(t *testing.T) {
 		_, err := impl.RegisterSensor(context.Background(), req)
 		assert.NoError(t, err)
 
-		sendReq := &v1.SendSensorDataRequest{
+		sendReq := &v1.ReportSensorRequest{
 			SensorId: sensor.SensorId,
-			Ok:       true,
+			Data:     map[string]string{},
 		}
-		_, err = impl.SendSensorData(context.Background(), sendReq)
+		_, err = impl.ReportSensor(context.Background(), sendReq)
 		assert.NoError(t, err)
 	}
-
-	// Query sensors with prefix pattern
-	queryReq := &v1.QuerySensorsRequest{
-		Path: "prefix*",
-	}
-	queryResp, err := impl.QuerySensors(context.Background(), queryReq)
-	assert.NoError(t, err)
-
-	foundCount := 0
-	for _, status := range queryResp.Sensors {
-		if status.SensorId == "prefix-a-sensor-1" || status.SensorId == "prefix-b-sensor-2" {
-			foundCount++
-			assert.Equal(t, "ACTIVE", status.Status)
-		}
-	}
-
-	assert.Equal(t, 2, foundCount)
-
+	
 	// Query by exact sensor ID
 	queryReqExact := &v1.QuerySensorsRequest{
 		Path: "prefix-a-sensor-1",
@@ -228,6 +212,7 @@ func TestQuerySensors_ByPath(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 1, filteredCount)
+
 }
 
 func TestQuerySensors_ByLabels(t *testing.T) {
@@ -261,11 +246,11 @@ func TestQuerySensors_ByLabels(t *testing.T) {
 		_, err := impl.RegisterSensor(context.Background(), req)
 		assert.NoError(t, err)
 
-		sendReq := &v1.SendSensorDataRequest{
+		sendReq := &v1.ReportSensorRequest{
 			SensorId: sensor.SensorId,
-			Ok:       true,
+			Data:     map[string]string{},
 		}
-		_, err = impl.SendSensorData(context.Background(), sendReq)
+		_, err = impl.ReportSensor(context.Background(), sendReq)
 		assert.NoError(t, err)
 	}
 

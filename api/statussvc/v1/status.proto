@@ -1,0 +1,82 @@
+syntax = "proto3";
+
+package statussvc.v1;
+
+option go_package = "github.com/tomekjarosik/one-status/api/statussvc/v1";
+
+import "google/api/annotations.proto";
+
+message Label {
+    string key = 1;
+    string value = 2;
+}
+
+message SensorInfo {
+    string sensor_id = 1;
+    string sensor_name = 2;
+    string description = 3;
+    int64 graceful_period_seconds = 4;
+    int64 failure_period_seconds = 5;
+    repeated Label labels = 6;
+}
+
+message RegisterSensorRequest {
+    SensorInfo sensor = 1;
+}
+
+message RegisterSensorResponse {
+    string sensor_id = 1;
+    bool success = 2;
+    int64 timestamp = 3;
+}
+
+message ReportSensorRequest {
+    string sensor_id = 1;
+    map<string, string> data = 2;
+}
+
+message ReportSensorResponse {
+    string sensor_id = 1;
+    bool success = 2;
+    int64 timestamp = 3;
+}
+
+message SensorStatus {
+    string sensor_id = 1;
+    string status = 2;
+    int64 last_ok_timestamp = 3;
+    int64 last_updated_timestamp = 4;
+}
+
+message QuerySensorsRequest {
+    string path = 1;
+    repeated Label labels = 2;
+    string status = 3;
+}
+
+message QuerySensorsResponse {
+    repeated SensorStatus sensors = 1;
+}
+
+service StatusService {
+
+    rpc RegisterSensor(RegisterSensorRequest) returns (RegisterSensorResponse) {
+        option (google.api.http) = {
+            post: "/api/v1/sensors"
+            body: "*"
+        };
+    }
+
+    rpc QuerySensors(QuerySensorsRequest) returns (QuerySensorsResponse) {
+        option (google.api.http) = {
+            get: "/api/v1/sensors"
+        };
+    }
+
+    rpc ReportSensor(ReportSensorRequest) returns (ReportSensorResponse) {
+        option (google.api.http) = {
+            post: "/api/v1/sensor/data"
+            body: "*"
+        };
+    }
+}

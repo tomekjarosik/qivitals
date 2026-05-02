@@ -30,12 +30,13 @@ type SensorState struct {
 	Info            *SensorInfo
 	LastOkTimestamp int64
 	LastUpdated     int64
+	Metadata        map[string]string
 }
 
 // SensorStorage defines the interface for sensor persistence
 type SensorStorage interface {
 	Register(sensor *SensorInfo) error
-	SendData(sensorID string, ok bool) error
+	SendData(sensorID string, ok bool, metadata map[string]string) error
 	GetStatus(sensorID string) (*SensorState, error)
 	QueryByPath(path string) ([]string, error)
 	QueryByLabels(labels map[string]string) ([]string, error)
@@ -82,6 +83,7 @@ func (m *MemorySensorStorage) Register(sensor *SensorInfo) error {
 		},
 		LastOkTimestamp: now,
 		LastUpdated:     now,
+		Metadata:        make(map[string]string),
 	}
 
 	// Store sensor
@@ -94,8 +96,10 @@ func (m *MemorySensorStorage) Register(sensor *SensorInfo) error {
 		}
 		for key, value := range sensor.Labels {
 			m.labelsIndex[sensor.ID][key] = true
-			m.labelsIndex[key] = make(map[string]bool)
-			m.labelsIndex[key][value] = true
+			if m.labelsIndex[key] == nil {
+				m.labelsIndex[key] = make(map[string]bool)
+			}
+			m.labelsIndex[key][value]	= true
 		}
 	}
 
@@ -112,7 +116,7 @@ func (m *MemorySensorStorage) Register(sensor *SensorInfo) error {
 }
 
 // SendData updates the last OK timestamp and last update timestamp for a sensor
-func (m *MemorySensorStorage) SendData(sensorID string, ok bool) error {
+func (m *MemorySensorStorage) SendData(sensorID string, ok bool, metadata map[string]string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -128,6 +132,9 @@ func (m *MemorySensorStorage) SendData(sensorID string, ok bool) error {
 	}
 
 	state.LastUpdated = now
+	for k, v := range metadata {
+		state.Metadata[k] = v
+	}
 
 	return nil
 }

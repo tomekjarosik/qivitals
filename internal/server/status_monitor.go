@@ -54,11 +54,11 @@ func (s *StatusMonitorService) RegisterSensor(ctx context.Context, req *v1.Regis
 	}, nil
 }
 
-func (s *StatusMonitorService) SendSensorData(ctx context.Context, req *v1.SendSensorDataRequest) (*v1.SendSensorDataResponse, error) {
-	if err := s.storage.SendData(req.SensorId, req.Ok); err != nil {
+func (s *StatusMonitorService) ReportSensor(ctx context.Context, req *v1.ReportSensorRequest) (*v1.ReportSensorResponse, error) {
+	if err := s.storage.SendData(req.SensorId, true, req.Data); err != nil {
 		if _, ok := err.(*storage.SensorNotFoundError); ok {
 			timestamp := time.Now().Unix()
-			return &v1.SendSensorDataResponse{
+			return &v1.ReportSensorResponse{
 				SensorId:  req.SensorId,
 				Success:   false,
 				Timestamp: timestamp,
@@ -68,7 +68,7 @@ func (s *StatusMonitorService) SendSensorData(ctx context.Context, req *v1.SendS
 	}
 
 	timestamp := time.Now().Unix()
-	return &v1.SendSensorDataResponse{
+	return &v1.ReportSensorResponse{
 		SensorId:  req.SensorId,
 		Success:   true,
 		Timestamp: timestamp,
