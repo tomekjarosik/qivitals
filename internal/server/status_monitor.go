@@ -80,6 +80,18 @@ func (s *StatusMonitorService) ReportSensor(ctx context.Context, req *v1.ReportS
 	}, nil
 }
 
+func (s *StatusMonitorService) DeleteSensor(ctx context.Context, req *v1.DeleteSensorRequest) (*v1.DeleteSensorResponse, error) {
+	if err := s.storage.Delete(ctx, req.Id); err != nil {
+		var sensorNotFoundError *storage.SensorNotFoundError
+		if errors.As(err, &sensorNotFoundError) {
+			return &v1.DeleteSensorResponse{Success: false}, err
+		}
+		return nil, err
+	}
+
+	return &v1.DeleteSensorResponse{Success: true}, nil
+}
+
 func (s *StatusMonitorService) QuerySensors(ctx context.Context, req *v1.QuerySensorsRequest) (*v1.QuerySensorsResponse, error) {
 	// Build the filter using the new storage.QueryFilter structure
 	filter := storage.QueryFilter{

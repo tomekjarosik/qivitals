@@ -106,6 +106,12 @@ func RequireState(t *testing.T, id, expectedState string) {
 	t.Fatalf("Sensor %s not found during state check", id)
 }
 
+func Delete(t *testing.T, id string) {
+	out, stderr, err := runCLI(t, "delete", "--id", id)
+	require.NoError(t, err, "Failed to delete sensor %s. Err: %s", id, stderr)
+	require.Contains(t, out, "deleted successfully")
+}
+
 // --- Domain Models for JSON Parsing ---
 type E2ESensor struct {
 	Spec struct {

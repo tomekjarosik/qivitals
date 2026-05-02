@@ -59,6 +59,9 @@ type SensorStorage interface {
 	// GetByNaturalKey allows the service layer to translate human inputs into an ID
 	GetByNaturalKey(ctx context.Context, namespace string, name string) (*SensorState, error)
 
+	// Delete removes a sensor from the storage
+	Delete(ctx context.Context, sensorID string) error
+
 	// Query returns all sensors matching the broader filter criteria
 	Query(ctx context.Context, filter QueryFilter) ([]*SensorState, error)
 }

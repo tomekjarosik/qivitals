@@ -185,6 +185,18 @@ outer:
 	return results, nil
 }
 
+func (m *MemorySensorStorage) Delete(ctx context.Context, sensorID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, exists := m.sensors[sensorID]; !exists {
+		return &SensorNotFoundError{SensorID: sensorID}
+	}
+
+	delete(m.sensors, sensorID)
+	return nil
+}
+
 // matchesPath checks if a path matches the given pattern
 func matchesPath(foundPath, path string) bool {
 	if path == "" {

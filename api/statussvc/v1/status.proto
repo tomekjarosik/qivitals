@@ -74,6 +74,14 @@ message ReportSensorResponse {
   int64 timestamp = 3;
 }
 
+message DeleteSensorRequest {
+  string id = 1;
+}
+
+message DeleteSensorResponse {
+  bool success = 1;
+}
+
 message QuerySensorsRequest {
   string id = 1;
   string name = 2;
@@ -117,6 +125,12 @@ service StatusService {
     option (google.api.http) = {
       post: "/api/v1/sensor/data"
       body: "*"
+    };
+  }
+
+  rpc DeleteSensor(DeleteSensorRequest) returns (DeleteSensorResponse) {
+    option (google.api.http) = {
+      delete: "/api/v1/sensors/{id}"
     };
   }
 }

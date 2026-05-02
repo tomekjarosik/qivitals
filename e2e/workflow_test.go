@@ -89,3 +89,22 @@ func TestWorkflow_FamilyChores(t *testing.T) {
 	Report(t, plantsID)
 	RequireState(t, plantsID, "ACTIVE")
 }
+
+func TestWorkflow_TemporaryProject(t *testing.T) {
+	serverCmd := startTestServer(t)
+	defer serverCmd.Process.Kill()
+
+	// 1. Create a sensor for a temporary build job
+	jobID := Register(t, "temp", "build-job-123", "Short-lived build job", 3600, 7200)
+
+	// 2. Job is active
+	Report(t, jobID, "progress=50%")
+	RequireState(t, jobID, "ACTIVE")
+
+	// 3. Job finishes, we delete the sensor
+	Delete(t, jobID)
+
+	// 4. Verify it's gone
+	res := Query(t, "--namespace", "temp")
+	assert.Len(t, res.Sensors, 0, "Sensor should be deleted")
+}

@@ -42,4 +42,7 @@ Sensorcli will communicate over gRPC - it must have basic functionality to read,
 [ ] - add sensor data evaluation function to SensorInfo - could be few predefined at first
 [ ] - add web UI to display statuses with URL query param to filter them
 [ ] - add functionality to make status "reviewed" / "casual"
-[ ] - 
+[ ] - figure out easiest sensors to fix first (WebUI)
+[ ] - implement streaks - how often a sensor did not fail
+[ ] - implement "Nudge" service that will send reminders
+[ ] - webUI: namespace health percentage and "streaks" - how often a sensor did not fail
