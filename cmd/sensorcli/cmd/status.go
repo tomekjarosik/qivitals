@@ -9,6 +9,7 @@ import (
 
 func NewCmdStatus() *cobra.Command {
 	var sensorID string
+	var namespace string
 
 	cmd := &cobra.Command{
 		Use:   "status [flags]",
@@ -17,18 +18,21 @@ func NewCmdStatus() *cobra.Command {
 
 Examples:
   sensorcli status --id my-backup
-  sensorcli status -i sensor-001`,
+  sensorcli status -i sensor-001
+  sensorcli status --id my-backup --namespace my-namespace`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runStatus(cmd, args, sensorID)
+			return runStatus(cmd, args, sensorID, namespace)
 		},
 	}
 
 	cmd.Flags().StringVarP(&sensorID, "id", "i", "", "Sensor ID to check (required)")
+	cmd.Flags().StringVar(&namespace, "namespace", "", "Filter by namespace")
 	cmd.MarkFlagRequired("id")
 
 	return cmd
 }
-func runStatus(cmd *cobra.Command, _ []string, sensorID string) error {
+
+func runStatus(cmd *cobra.Command, _ []string, sensorID, namespace string) error {
 	// Connect to the gRPC server.
 	client, conn, err := NewStatusClient(cmd.Context())
 	if err != nil {
@@ -36,7 +40,10 @@ func runStatus(cmd *cobra.Command, _ []string, sensorID string) error {
 	}
 	defer conn.Close()
 
-	req := &v1.QuerySensorsRequest{Id: sensorID}
+	req := &v1.QuerySensorsRequest{
+		Id:        sensorID,
+		Namespace: namespace,
+	}
 
 	// Execute the gRPC call
 	response, err := client.QuerySensors(cmd.Context(), req)
@@ -51,7 +58,7 @@ func runStatus(cmd *cobra.Command, _ []string, sensorID string) error {
 	s := response.Sensors[0]
 
 	fmt.Printf("\nSensor: %s\n", s.Id)
-	fmt.Printf("Status: %s\n", s.Status)
+	fmt.Printf("Status: %s\n", s.Status.State)
 	fmt.Printf("Last Heartbeat: %s (%s ago)\n",
 		timeString(s.Status.LastOkTimestamp),
 		ageString(s.Status.LastOkTimestamp))

@@ -10,6 +10,7 @@ import (
 
 func NewCmdQuery() *cobra.Command {
 	var path string
+	var namespace string
 	var status string
 	var labels []string
 
@@ -24,18 +25,19 @@ Examples:
   sensorcli query --label "env:production" --label "region:us-east"
   sensorcli query --path "temp*" --status DEAD`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runQuery(cmd, args, path, status, labels)
+			return runQuery(cmd, args, path, namespace, status, labels)
 		},
 	}
 
 	cmd.Flags().StringVar(&path, "path", "", "Filter by path prefix (supports * wildcard)")
+	cmd.Flags().StringVar(&namespace, "namespace", "", "Filter by namespace")
 	cmd.Flags().StringVar(&status, "status", "", "Filter by status: ACTIVE, DEGRADED, or DEAD")
 	cmd.Flags().StringArrayVar(&labels, "label", []string{}, "Filter by label key:value pairs (can be repeated)")
 
 	return cmd
 }
 
-func runQuery(cmd *cobra.Command, _ []string, path, status string, labelStrings []string) error {
+func runQuery(cmd *cobra.Command, _ []string, path, namespace, status string, labelStrings []string) error {
 	client, conn, err := NewStatusClient(cmd.Context())
 	if err != nil {
 		return fmt.Errorf("failed to connect to gRPC server: %w", err)
@@ -50,7 +52,7 @@ func runQuery(cmd *cobra.Command, _ []string, path, status string, labelStrings 
 	// Unlike HTTP, we don't need to worry about query parameter concatenation;
 	// we simply populate the structured request object.
 	req := &v1.QuerySensorsRequest{
-		Namespace: path,
+		Namespace: namespace,
 		Status:    status,
 		Labels:    parsedLabels,
 	}

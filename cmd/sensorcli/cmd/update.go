@@ -12,6 +12,7 @@ import (
 func NewCmdUpdate() *cobra.Command {
 	var (
 		sensorID        string
+		namespace       string
 		sensorName      string
 		description     string
 		gracefulSeconds int64
@@ -40,11 +41,12 @@ Examples:
   # Remove a label
   sensorcli update --id 550e8400-e29b --remove-label "temporary-debug"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runUpdate(cmd, sensorID, sensorName, description, gracefulSeconds, failureSeconds, labelsToAdd, labelsToRemove)
+			return runUpdate(cmd, sensorID, namespace, sensorName, description, gracefulSeconds, failureSeconds, labelsToAdd, labelsToRemove)
 		},
 	}
 
 	cmd.Flags().StringVarP(&sensorID, "id", "i", "", "Unique sensor UUID to update (required)")
+	cmd.Flags().StringVar(&namespace, "namespace", "", "Namespace for the sensor")
 	cmd.Flags().StringVarP(&sensorName, "name", "n", "", "New human-readable sensor name")
 	cmd.Flags().StringVar(&description, "desc", "", "New sensor description")
 	cmd.Flags().Int64Var(&gracefulSeconds, "graceful", 0, "New graceful period in seconds")
@@ -57,7 +59,7 @@ Examples:
 	return cmd
 }
 
-func runUpdate(cmd *cobra.Command, sensorID, sensorName, description string, gracefulSeconds, failureSeconds int64, labelsToAdd, labelsToRemove []string) error {
+func runUpdate(cmd *cobra.Command, sensorID, namespace, sensorName, description string, gracefulSeconds, failureSeconds int64, labelsToAdd, labelsToRemove []string) error {
 	client, conn, err := NewStatusClient(cmd.Context())
 	if err != nil {
 		return fmt.Errorf("failed to connect to gRPC server: %w", err)
@@ -74,6 +76,10 @@ func runUpdate(cmd *cobra.Command, sensorID, sensorName, description string, gra
 	if cmd.Flags().Changed("name") {
 		sensorSpec.Name = sensorName
 		updatePaths = append(updatePaths, "name")
+	}
+	if cmd.Flags().Changed("namespace") {
+		sensorSpec.Namespace = sensorName
+		updatePaths = append(updatePaths, "namespace")
 	}
 	if cmd.Flags().Changed("desc") {
 		sensorSpec.Description = description
