@@ -108,3 +108,58 @@ func TestWorkflow_TemporaryProject(t *testing.T) {
 	res := Query(t, "--namespace", "temp")
 	assert.Len(t, res.Sensors, 0, "Sensor should be deleted")
 }
+
+func TestWorkflow_AdvancedQueryFiltering(t *testing.T) {
+	serverCmd := startTestServer(t)
+	defer serverCmd.Process.Kill()
+
+	// 1. Setup a diverse set of sensors across different namespaces and names
+	Register(t, "infra", "db-backup-us-east", "Postgres backup", 3600, 7200, "env=prod", "team=data", "critical=true")
+	Register(t, "infra", "db-backup-eu-west", "Postgres backup EU", 3600, 7200, "env=prod", "team=data", "critical=true")
+	Register(t, "app", "api-health", "API healthcheck", 60, 120, "env=prod", "team=backend")
+	Register(t, "app", "api-staging-health", "Staging API ping", 60, 120, "env=staging", "team=backend")
+	Register(t, "chores", "clean-backup-drives", "Manual cleanup of old tapes", 86400, 172800, "manual=true")
+
+	// Helper to extract names from a query response
+	getNames := func(resp E2EQueryResponse) []string {
+		var names []string
+		for _, s := range resp.Sensors {
+			names = append(names, s.Spec.Name)
+		}
+		return names
+	}
+
+	// Case A: Free-text search across namespaces
+	// Should find both DB backups and the manual chore because they all contain "backup" in name or desc
+	resSearch := Query(t, "--search", "backup")
+	assert.Len(t, resSearch.Sensors, 3)
+	names := getNames(resSearch)
+	assert.Contains(t, names, "db-backup-us-east")
+	assert.Contains(t, names, "db-backup-eu-west")
+	assert.Contains(t, names, "clean-backup-drives")
+
+	// Case B: Search + Namespace filter
+	// Should only find the infra backups, ignoring the chore
+	resSearchNS := Query(t, "--search", "backup", "--namespace", "infra")
+	assert.Len(t, resSearchNS.Sensors, 2)
+	assert.NotContains(t, getNames(resSearchNS), "clean-backup-drives")
+
+	// Case C: Exact Label matching
+	// Find all prod sensors
+	resProd := Query(t, "--label", "env=prod")
+	assert.Len(t, resProd.Sensors, 3) // both DBs + api-health
+
+	// Case D: Multiple Exact Labels (AND logic)
+	// Find prod sensors owned by backend team
+	resProdBackend := Query(t, "--label", "env=prod", "--label", "team=backend")
+	assert.Len(t, resProdBackend.Sensors, 1)
+	assert.Equal(t, "api-health", resProdBackend.Sensors[0].Spec.Name)
+
+	// Case E: Has-Label (Key existence only)
+	// Find any sensor that has the "critical" label, regardless of its value
+	resCritical := Query(t, "--has-label", "critical")
+	assert.Len(t, resCritical.Sensors, 2)
+	names = getNames(resCritical)
+	assert.Contains(t, names, "db-backup-us-east")
+	assert.Contains(t, names, "db-backup-eu-west")
+}

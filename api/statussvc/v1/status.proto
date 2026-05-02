@@ -84,14 +84,26 @@ message DeleteSensorResponse {
 
 message QuerySensorsRequest {
   string id = 1;
-  string name = 2;
-  string namespace = 3;
+  string namespace = 2;
+  string name = 3;
 
-  repeated Label labels = 4;
-  string status = 5;
+  // Free-text search across name and description
+  string search = 4;
 
-  int32 page_size = 6;
-  string page_token = 7;
+  // Exact key=value matches (Postgres: labels @> '{"env":"prod"}')
+  repeated Label labels = 5;
+
+  // Must contain these keys, values don't matter (Postgres: labels ? 'critical')
+  repeated string has_label_keys = 6;
+
+  // Filter by multiple statuses (e.g. ["DEGRADED", "DEAD"])
+  repeated string statuses = 7;
+
+  // Pagination & Sorting
+  int32 page_size = 8;
+  string page_token = 9;
+  string order_by = 10; // e.g., "last_updated", "name"
+  bool order_desc = 11;
 }
 
 message QuerySensorsResponse {

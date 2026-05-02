@@ -25,6 +25,7 @@ func (s *StatusMonitorService) RegisterSensor(ctx context.Context, req *v1.Regis
 	sensor := &storage.SensorInfo{
 		ID:             req.Spec.Id,
 		Name:           req.Spec.Name,
+		Namespace:      req.Spec.Namespace,
 		Description:    req.Spec.Description,
 		GracefulPeriod: req.Spec.GracefulPeriodSeconds,
 		FailurePeriod:  req.Spec.FailurePeriodSeconds,
@@ -95,9 +96,17 @@ func (s *StatusMonitorService) DeleteSensor(ctx context.Context, req *v1.DeleteS
 func (s *StatusMonitorService) QuerySensors(ctx context.Context, req *v1.QuerySensorsRequest) (*v1.QuerySensorsResponse, error) {
 	// Build the filter using the new storage.QueryFilter structure
 	filter := storage.QueryFilter{
-		Namespace: req.Namespace,
-		ID:        req.Id,
-		Labels:    convertLabels(req.Labels),
+		ID:           req.Id,
+		Namespace:    req.Namespace,
+		Name:         req.Name,
+		Search:       req.Search,
+		Labels:       convertLabels(req.Labels),
+		HasLabelKeys: req.HasLabelKeys,
+		Statuses:     req.Statuses,
+		OrderBy:      req.OrderBy,
+		OrderDesc:    req.OrderDesc,
+		Limit:        int(req.PageSize),
+		// Offset/Pagination via PageToken can be implemented here later
 	}
 
 	// Fetch all matching full states in ONE call
@@ -111,9 +120,19 @@ func (s *StatusMonitorService) QuerySensors(ctx context.Context, req *v1.QuerySe
 	for _, state := range states {
 		computedState := calculateSensorStatus(state)
 
-		// If the request specifically filtered by status, we can enforce it here
-		if req.Status != "" && req.Status != computedState {
-			continue
+		// If the request specifically filtered by status, we enforce it here
+		// (MemoryStorage defers computed status filtering to the service layer)
+		if len(req.Statuses) > 0 {
+			statusMatch := false
+			for _, allowedStatus := range req.Statuses {
+				if computedState == allowedStatus {
+					statusMatch = true
+					break
+				}
+			}
+			if !statusMatch {
+				continue
+			}
 		}
 
 		// Convert storage labels to proto labels

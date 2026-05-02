@@ -9,31 +9,35 @@ import (
 
 func NewCmdStatus() *cobra.Command {
 	var sensorID string
+	var sensorName string
 	var namespace string
 
 	cmd := &cobra.Command{
 		Use:   "status [flags]",
 		Short: "Get the detailed status of a specific sensor",
-		Long: `Show the full health details for a single sensor.
+		Long: `Show the full health details, configuration (spec), and latest telemetry data for a single sensor.
+
+You can look up a sensor by its unique UUID, or by its human-readable Name and Namespace.
 
 Examples:
-  sensorcli status --id my-backup
-  sensorcli status -i sensor-001
-  sensorcli status --id my-backup --namespace my-namespace`,
+  sensorcli status --name "Daily Backup" --namespace db
+  sensorcli status --id 550e8400-e29b-41d4-a716-446655440000`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runStatus(cmd, args, sensorID, namespace)
+			if sensorID == "" && sensorName == "" {
+				return fmt.Errorf("must provide either --id or --name to identify the sensor")
+			}
+			return runStatus(cmd, args, sensorID, sensorName, namespace)
 		},
 	}
 
-	cmd.Flags().StringVarP(&sensorID, "id", "i", "", "Sensor ID to check (required)")
-	cmd.Flags().StringVar(&namespace, "namespace", "", "Filter by namespace")
-	cmd.MarkFlagRequired("id")
+	cmd.Flags().StringVarP(&sensorID, "id", "i", "", "Sensor ID to check")
+	cmd.Flags().StringVarP(&sensorName, "name", "n", "", "Sensor Name to check")
+	cmd.Flags().StringVar(&namespace, "namespace", "", "Namespace of the sensor")
 
 	return cmd
 }
 
-func runStatus(cmd *cobra.Command, _ []string, sensorID, namespace string) error {
-	// Connect to the gRPC server.
+func runStatus(cmd *cobra.Command, _ []string, sensorID, sensorName, namespace string) error {
 	client, conn, err := NewStatusClient(cmd.Context())
 	if err != nil {
 		return fmt.Errorf("failed to connect to gRPC server: %w", err)
@@ -42,6 +46,7 @@ func runStatus(cmd *cobra.Command, _ []string, sensorID, namespace string) error
 
 	req := &v1.QuerySensorsRequest{
 		Id:        sensorID,
+		Name:      sensorName,
 		Namespace: namespace,
 	}
 
@@ -52,18 +57,45 @@ func runStatus(cmd *cobra.Command, _ []string, sensorID, namespace string) error
 	}
 
 	if len(response.Sensors) == 0 {
-		return fmt.Errorf("sensor '%s' not found", sensorID)
+		return fmt.Errorf("sensor not found")
 	}
 
 	s := response.Sensors[0]
 
-	fmt.Printf("\nSensor: %s\n", s.Id)
-	fmt.Printf("Status: %s\n", s.Status.State)
-	fmt.Printf("Last Heartbeat: %s (%s ago)\n",
-		timeString(s.Status.LastOkTimestamp),
-		ageString(s.Status.LastOkTimestamp))
-	fmt.Printf("Last Updated: %s\n",
-		timeString(s.Status.LastUpdatedTimestamp))
+	// Support machine-readable output if requested globally
+	if emitJsonFromMessage(s) {
+		return nil
+	}
+
+	fmt.Printf("\n--- Sensor Details ---\n")
+	fmt.Printf("ID:             %s\n", s.Id)
+	fmt.Printf("Name:           %s\n", s.Spec.Name)
+	fmt.Printf("Namespace:      %s\n", s.Spec.Namespace)
+	if s.Spec.Description != "" {
+		fmt.Printf("Description:    %s\n", s.Spec.Description)
+	}
+
+	fmt.Printf("\n--- Status ---\n")
+	fmt.Printf("State:          %s\n", s.Status.State)
+	fmt.Printf("Last Heartbeat: %s\n", timeString(s.Status.LastOkTimestamp))
+	fmt.Printf("Last Updated:   %s\n", timeString(s.Status.LastUpdatedTimestamp))
+	fmt.Printf("Grace Period:   %d seconds\n", s.Spec.GracefulPeriodSeconds)
+	fmt.Printf("Failure Period: %d seconds\n", s.Spec.FailurePeriodSeconds)
+
+	if len(s.Spec.Labels) > 0 {
+		fmt.Printf("\n--- Labels ---\n")
+		for _, l := range s.Spec.Labels {
+			fmt.Printf("  %s: %s\n", l.Key, l.Value)
+		}
+	}
+
+	if len(s.Status.ReportedData) > 0 {
+		fmt.Printf("\n--- Latest Telemetry Data ---\n")
+		for k, v := range s.Status.ReportedData {
+			fmt.Printf("  %s: %s\n", k, v)
+		}
+	}
+	fmt.Println()
 
 	return nil
 }

@@ -34,11 +34,20 @@ type SensorState struct {
 }
 
 type QueryFilter struct {
-	Namespace string
 	ID        string
-	Path      string // If you are keeping path-based matching
-	Labels    map[string]string
-	Status    string
+	Namespace string
+	Name      string
+
+	// Advanced UI Filtering
+	Search       string            // Matches substring in Name or Description
+	Labels       map[string]string // Exact matches (AND logic)
+	HasLabelKeys []string          // Key existence (AND logic)
+	Statuses     []string          // IN clause for computed statuses
+
+	OrderBy   string
+	OrderDesc bool
+	Limit     int
+	Cursor    string
 }
 
 // SensorStorage defines the interface for sensor persistence
@@ -55,9 +64,6 @@ type SensorStorage interface {
 
 	// GetStatus retrieves a single sensor's full state by its unique ID
 	GetStatus(ctx context.Context, sensorID string) (*SensorState, error)
-
-	// GetByNaturalKey allows the service layer to translate human inputs into an ID
-	GetByNaturalKey(ctx context.Context, namespace string, name string) (*SensorState, error)
 
 	// Delete removes a sensor from the storage
 	Delete(ctx context.Context, sensorID string) error

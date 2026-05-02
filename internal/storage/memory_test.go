@@ -144,11 +144,6 @@ func TestMemorySensorStorage_Query(t *testing.T) {
 			expectedCount: 1,
 		},
 		{
-			name:          "Filter by path wildcard",
-			filter:        QueryFilter{Path: "job-*"},
-			expectedCount: 2,
-		},
-		{
 			name:          "Filter by single label",
 			filter:        QueryFilter{Labels: map[string]string{"env": "prod"}},
 			expectedCount: 2,

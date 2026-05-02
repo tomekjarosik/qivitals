@@ -2,6 +2,8 @@ package storage
 
 import (
 	"context"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -48,6 +50,7 @@ func (m *MemorySensorStorage) Register(ctx context.Context, sensor *SensorInfo) 
 		Info: &SensorInfo{
 			ID:             sensor.ID,
 			Name:           sensor.Name,
+			Namespace:      sensor.Namespace,
 			Description:    sensor.Description,
 			GracefulPeriod: sensor.GracefulPeriod,
 			FailurePeriod:  sensor.FailurePeriod,
@@ -160,10 +163,25 @@ outer:
 			continue
 		}
 
-		if filter.Path != "" && !matchesPath(state.Info.Name, filter.Path) {
+		if filter.Name != "" && state.Info.Name != filter.Name {
 			continue
 		}
 
+		if filter.Namespace != "" && state.Info.Namespace != filter.Namespace {
+			continue
+		}
+
+		// 1. Free-text Search (case-insensitive substring match)
+		if filter.Search != "" {
+			searchLower := strings.ToLower(filter.Search)
+			nameMatch := strings.Contains(strings.ToLower(state.Info.Name), searchLower)
+			descMatch := strings.Contains(strings.ToLower(state.Info.Description), searchLower)
+			if !nameMatch && !descMatch {
+				continue
+			}
+		}
+
+		// 2. Exact Label Value match
 		if len(filter.Labels) > 0 {
 			if state.Info.Labels == nil {
 				continue
@@ -175,11 +193,50 @@ outer:
 			}
 		}
 
-		// Note: Filtering by calculated Status requires evaluating the age here
-		// If you want to support filter.Status, you'll need to calculate it for the state
-		// and compare it, just like calculateSensorStatus does in your server layer.
+		// 3. Label Key Existence match
+		if len(filter.HasLabelKeys) > 0 {
+			if state.Info.Labels == nil {
+				continue
+			}
+			for _, requiredKey := range filter.HasLabelKeys {
+				if _, exists := state.Info.Labels[requiredKey]; !exists {
+					continue outer
+				}
+			}
+		}
 
 		results = append(results, state)
+	}
+
+	// 4. Sorting
+	if filter.OrderBy != "" {
+		sort.Slice(results, func(i, j int) bool {
+			a, b := results[i], results[j]
+			var less bool
+
+			switch filter.OrderBy {
+			case "name":
+				less = a.Info.Name < b.Info.Name
+			case "last_updated":
+				less = a.LastUpdated < b.LastUpdated
+			case "last_ok":
+				less = a.LastOkTimestamp < b.LastOkTimestamp
+			default:
+				// Default to registered time if unknown field
+				less = a.Info.RegisteredAt < b.Info.RegisteredAt
+			}
+
+			if filter.OrderDesc {
+				return !less // Reverse the sort order
+			}
+			return less
+		})
+	}
+
+	// 5. Pagination (Limit/Offset)
+	// Offset logic can be added later if you build a token-based pagination system
+	if filter.Limit > 0 && len(results) > filter.Limit {
+		results = results[:filter.Limit]
 	}
 
 	return results, nil

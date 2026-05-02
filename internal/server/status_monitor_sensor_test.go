@@ -148,7 +148,7 @@ func TestQuerySensors(t *testing.T) {
 
 	// Query all ACTIVE sensors (status filter)
 	queryReqActive := &v1.QuerySensorsRequest{
-		Status: "ACTIVE",
+		Statuses: []string{"ACTIVE"},
 	}
 	queryRespActive, err := impl.QuerySensors(context.Background(), queryReqActive)
 	assert.NoError(t, err)

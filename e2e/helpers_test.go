@@ -71,7 +71,8 @@ func Register(t *testing.T, namespace, name, desc string, graceful, failure int6
 	require.Contains(t, out, "Sensor registered successfully")
 
 	// Query it immediately to get the generated ID
-	resp := Query(t, "--namespace", namespace, "--name", "name")
+	resp := Query(t, "--namespace", namespace, "--name", name)
+	require.Len(t, resp.Sensors, 1)
 	return resp.Sensors[0].Spec.Id
 }
 
