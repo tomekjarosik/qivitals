@@ -60,6 +60,10 @@ func runQuery(cmd *cobra.Command, _ []string, path, status string, labelStrings 
 		return fmt.Errorf("failed to query sensors: %w", err)
 	}
 
+	if emitJsonFromMessage(response) {
+		return nil
+	}
+
 	printQueryResult(len(response.Sensors), response.Sensors)
 
 	return nil

@@ -51,6 +51,11 @@ Register sensors, send health check signals, and query sensor statuses all from 
 	rootCmd.PersistentFlags().StringVar(&baseURL, "url", "localhost:50051", "One Status service gRPC endpoint (host:port)")
 	viper.BindPFlag("url", rootCmd.PersistentFlags().Lookup("url"))
 
+	// Define the --machine global flag for JSON output
+	var machineOutput bool
+	rootCmd.PersistentFlags().BoolVarP(&machineOutput, "machine", "m", false, "output response in machine-readable JSON format")
+	viper.BindPFlag("machine", rootCmd.PersistentFlags().Lookup("machine"))
+
 	// Add subcommands
 	rootCmd.AddCommand(
 		NewCmdRegister(),
@@ -62,7 +67,6 @@ Register sensors, send health check signals, and query sensor statuses all from 
 	return rootCmd
 }
 
-// Execute runs the provided command and handles signals for graceful shutdown.
 // Execute runs the provided command and handles signals for graceful shutdown.
 func Execute(rootCmd *cobra.Command) {
 	// Use a context that listens for the interrupt signal (Ctrl+C)
@@ -79,6 +83,8 @@ func Execute(rootCmd *cobra.Command) {
 // initConfig handles configuration loading (Placeholder)
 func initConfig() error {
 	viper.SetDefault("url", "localhost:50051")
+	// Add the prefix. Viper will automatically look for SENSORCLI_URL
+	viper.SetEnvPrefix("SENSORCLI")
 	viper.AutomaticEnv()
 	return nil
 }

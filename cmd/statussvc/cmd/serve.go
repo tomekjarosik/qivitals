@@ -11,6 +11,7 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -20,21 +21,31 @@ import (
 	"github.com/tomekjarosik/one-status/internal/storage"
 )
 
-const (
-	grpcPort = "localhost:50051"
-	httpPort = "localhost:8088"
-)
-
 func NewCmdServe() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Starts the gRPC and HTTP gateway servers",
 		Long:  "Launches the status service monitoring system with gRPC and an HTTP gateway.",
 		RunE:  runServe,
 	}
+
+	// Add flags and bind to viper
+	cmd.Flags().String("grpc-port", "localhost:50051", "Address and port for gRPC server to listen on")
+	cmd.Flags().String("http-port", "localhost:8088", "Address and port for HTTP gateway to listen on")
+
+	viper.BindPFlag("grpc_port", cmd.Flags().Lookup("grpc-port"))
+	viper.BindPFlag("http_port", cmd.Flags().Lookup("http-port"))
+
+	return cmd
 }
 
 func runServe(cmd *cobra.Command, args []string) error {
+	// Ensure viper reads from environment variables (like GRPC_PORT)
+	viper.AutomaticEnv()
+
+	grpcPort := viper.GetString("grpc_port")
+	httpPort := viper.GetString("http_port")
+
 	ctx, cancel := context.WithCancel(cmd.Context())
 	defer cancel()
 
@@ -60,7 +71,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	gatewayCtx, gatewayCancel := context.WithCancel(ctx)
 	defer gatewayCancel()
 
-	gateway, err := createGateway(gatewayCtx)
+	gateway, err := createGateway(gatewayCtx, grpcPort)
 	if err != nil {
 		return err
 	}
@@ -101,7 +112,8 @@ func runServe(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func createGateway(ctx context.Context) (http.Handler, error) {
+// createGateway now takes the configured grpcPort instead of relying on the constant
+func createGateway(ctx context.Context, grpcPort string) (http.Handler, error) {
 	mux := runtime.NewServeMux()
 
 	conn, err := grpc.NewClient(
