@@ -93,7 +93,7 @@ func TestIntegration_EndToEndFlow(t *testing.T) {
 	require.NotNil(t, sensor.Status, "Expected Sensor to have a Status object")
 
 	// Check the fields inside the nested Status object
-	assert.Equal(t, "ACTIVE", sensor.Status.State, "Sensor should be active after receiving a report")
+	assert.Equal(t, "OK", sensor.Status.State, "Sensor should be active after receiving a report")
 	assert.Greater(t, sensor.Status.LastOkTimestamp, int64(0), "Timestamp should be recorded")
 
 	// Verify that the reported data was actually saved!

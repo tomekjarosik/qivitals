@@ -183,7 +183,7 @@ func calculateSensorStatus(state *storage.SensorState) string {
 	age := now - state.LastOkTimestamp
 
 	if age < state.Info.GracefulPeriod {
-		return "ACTIVE"
+		return "OK"
 	}
 
 	if age < state.Info.FailurePeriod {

@@ -21,7 +21,7 @@ func TestWorkflow_MonthlyBills(t *testing.T) {
 	Report(t, waterBillID, "paid_amount=45.50", "method=bank_transfer")
 
 	// 3. Verify: Bill is marked as ACTIVE (paid)
-	RequireState(t, waterBillID, "ACTIVE")
+	RequireState(t, waterBillID, "OK")
 
 	// 4. Verify details
 	res := Query(t, "--namespace", "home", "--name", "water-bill")
@@ -53,9 +53,9 @@ func TestWorkflow_ITInfrastructure(t *testing.T) {
 	Report(t, vmPingID, "latency_ms=4")
 
 	// --- Verifications ---
-	RequireState(t, tlsID, "ACTIVE")
-	RequireState(t, backupID, "ACTIVE")
-	RequireState(t, vmPingID, "ACTIVE")
+	RequireState(t, tlsID, "OK")
+	RequireState(t, backupID, "OK")
+	RequireState(t, vmPingID, "OK")
 }
 
 func TestWorkflow_HomeNetwork(t *testing.T) {
@@ -67,7 +67,7 @@ func TestWorkflow_HomeNetwork(t *testing.T) {
 
 	// Router sends OK
 	Report(t, internetID, "packet_loss=0%")
-	RequireState(t, internetID, "ACTIVE")
+	RequireState(t, internetID, "OK")
 }
 
 func TestWorkflow_FamilyChores(t *testing.T) {
@@ -82,12 +82,12 @@ func TestWorkflow_FamilyChores(t *testing.T) {
 
 	// Kid presses NFC button next to dog bowl
 	Report(t, dogID, "feeder=timmy")
-	RequireState(t, dogID, "ACTIVE")
+	RequireState(t, dogID, "OK")
 
 	// No one watered plants yet, but we just registered it, so it might technically be DEAD depending on initialization logic.
 	// We simulate a report to make it active.
 	Report(t, plantsID)
-	RequireState(t, plantsID, "ACTIVE")
+	RequireState(t, plantsID, "OK")
 }
 
 func TestWorkflow_TemporaryProject(t *testing.T) {
@@ -99,7 +99,7 @@ func TestWorkflow_TemporaryProject(t *testing.T) {
 
 	// 2. Job is active
 	Report(t, jobID, "progress=50%")
-	RequireState(t, jobID, "ACTIVE")
+	RequireState(t, jobID, "OK")
 
 	// 3. Job finishes, we delete the sensor
 	Delete(t, jobID)

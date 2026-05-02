@@ -8,7 +8,7 @@ import (
 type SensorStatusType string
 
 const (
-	StatusActive   SensorStatusType = "ACTIVE"
+	StatusActive   SensorStatusType = "OK"
 	StatusDegraded SensorStatusType = "DEGRADED"
 	StatusDead     SensorStatusType = "DEAD"
 )

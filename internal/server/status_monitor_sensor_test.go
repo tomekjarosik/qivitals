@@ -153,13 +153,13 @@ func TestQuerySensors(t *testing.T) {
 
 	assert.Greater(t, len(queryResp.Sensors), 0)
 	for _, sensor := range queryResp.Sensors {
-		assert.Equal(t, "ACTIVE", sensor.Status.State)
+		assert.Equal(t, "OK", sensor.Status.State)
 		assert.NotZero(t, sensor.Status.LastOkTimestamp)
 	}
 
 	// Query all ACTIVE sensors (status filter)
 	queryReqActive := &v1.QuerySensorsRequest{
-		Statuses: []string{"ACTIVE"},
+		Statuses: []string{"OK"},
 	}
 	queryRespActive, err := impl.QuerySensors(context.Background(), queryReqActive)
 	assert.NoError(t, err)
@@ -167,7 +167,7 @@ func TestQuerySensors(t *testing.T) {
 	if len(queryResp.Sensors) > 0 {
 		assert.GreaterOrEqual(t, len(queryRespActive.Sensors), 1)
 		for _, sensor := range queryRespActive.Sensors {
-			assert.Equal(t, "ACTIVE", sensor.Status.State)
+			assert.Equal(t, "OK", sensor.Status.State)
 		}
 	}
 }
@@ -285,7 +285,7 @@ func TestQuerySensors_ByLabels(t *testing.T) {
 	for _, sensor := range queryResp.Sensors {
 		if sensor.Metadata.Id == "sensor-1" {
 			filteredCount++
-			assert.Equal(t, "ACTIVE", sensor.Status.State)
+			assert.Equal(t, "OK", sensor.Status.State)
 		}
 	}
 	assert.Greater(t, filteredCount, 0)
@@ -322,14 +322,14 @@ func TestStatusCalculation(t *testing.T) {
 			age:            0,
 			gracefulPeriod: 60,
 			failurePeriod:  120,
-			expectedStatus: "ACTIVE",
+			expectedStatus: "OK",
 		},
 		{
 			name:           "Active - within graceful period",
 			age:            30,
 			gracefulPeriod: 60,
 			failurePeriod:  120,
-			expectedStatus: "ACTIVE",
+			expectedStatus: "OK",
 		},
 		{
 			name:           "Degraded - within graceful period",
