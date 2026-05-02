@@ -5,78 +5,116 @@ package statussvc.v1;
 option go_package = "github.com/tomekjarosik/one-status/api/statussvc/v1";
 
 import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
 
 message Label {
-    string key = 1;
-    string value = 2;
+  string key = 1;
+  string value = 2;
 }
 
-message SensorInfo {
-    string sensor_id = 1;
-    string sensor_name = 2;
-    string description = 3;
-    int64 graceful_period_seconds = 4;
-    int64 failure_period_seconds = 5;
-    repeated Label labels = 6;
+// SensorSpec represents the configuration and metadata of a sensor
+message SensorSpec {
+  string id = 1;
+  string namespace = 2;
+  string name = 3;
+  string description = 4;
+  int64 graceful_period_seconds = 5;
+  int64 failure_period_seconds = 6;
+  repeated Label labels = 7;
+}
+
+// SensorStatus represents the observed runtime state of the sensor
+message SensorStatus {
+  // The computed state of the sensor (e.g., "ACTIVE", "DEGRADED", "DEAD")
+  string state = 1;
+
+  int64 last_ok_timestamp = 2;
+  int64 last_updated_timestamp = 3;
+
+  // The most recent generic telemetry/data reported by the sensor.
+  // Example: {"disk_usage": "80", "cpu_temp": "65"}
+  map<string, string> reported_data = 4;
+}
+
+// Sensor represents the complete object, combining its Spec and current runtime Status
+message Sensor {
+  string id = 1;
+  SensorSpec spec = 2;
+  SensorStatus status = 3;
 }
 
 message RegisterSensorRequest {
-    SensorInfo sensor = 1;
+  SensorSpec spec = 1;
 }
 
 message RegisterSensorResponse {
-    string sensor_id = 1;
-    bool success = 2;
-    int64 timestamp = 3;
+  string id = 1;
+  bool success = 2;
+  int64 timestamp = 3;
+}
+
+message UpdateSensorRequest {
+  SensorSpec spec = 1;
+  google.protobuf.FieldMask update_mask = 2;
+}
+
+message UpdateSensorResponse {
+  SensorSpec spec = 1;
+  bool success = 2;
 }
 
 message ReportSensorRequest {
-    string sensor_id = 1;
-    map<string, string> data = 2;
+  string id = 1;
+  map<string, string> data = 2;
 }
 
 message ReportSensorResponse {
-    string sensor_id = 1;
-    bool success = 2;
-    int64 timestamp = 3;
-}
-
-message SensorStatus {
-    string sensor_id = 1;
-    string status = 2;
-    int64 last_ok_timestamp = 3;
-    int64 last_updated_timestamp = 4;
+  string id = 1;
+  bool success = 2;
+  int64 timestamp = 3;
 }
 
 message QuerySensorsRequest {
-    string path = 1;
-    repeated Label labels = 2;
-    string status = 3;
+  string namespace = 1;
+  string id = 2;
+  repeated Label labels = 3;
+  string status = 4;
+
+  int32 page_size = 5;
+  string page_token = 6;
 }
 
 message QuerySensorsResponse {
-    repeated SensorStatus sensors = 1;
+  repeated Sensor sensors = 1;
+  string next_page_token = 2;
 }
 
 service StatusService {
 
-    rpc RegisterSensor(RegisterSensorRequest) returns (RegisterSensorResponse) {
-        option (google.api.http) = {
-            post: "/api/v1/sensors"
-            body: "*"
-        };
-    }
+  rpc RegisterSensor(RegisterSensorRequest) returns (RegisterSensorResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/sensors"
+      body: "*"
+    };
+  }
 
-    rpc QuerySensors(QuerySensorsRequest) returns (QuerySensorsResponse) {
-        option (google.api.http) = {
-            get: "/api/v1/sensors"
-        };
-    }
+  rpc UpdateSensor(UpdateSensorRequest) returns (UpdateSensorResponse) {
+    option (google.api.http) = {
+      patch: "/api/v1/sensors/{spec.id}"
+      body: "*"
+    };
+  }
 
-    rpc ReportSensor(ReportSensorRequest) returns (ReportSensorResponse) {
-        option (google.api.http) = {
-            post: "/api/v1/sensor/data"
-            body: "*"
-        };
-    }
+  rpc QuerySensors(QuerySensorsRequest) returns (QuerySensorsResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/sensors"
+    };
+  }
+
+  rpc ReportSensor(ReportSensorRequest) returns (ReportSensorResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/sensor/data"
+      body: "*"
+    };
+  }
 }

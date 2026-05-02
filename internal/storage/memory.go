@@ -1,67 +1,26 @@
 package storage
 
 import (
+	"context"
 	"sync"
 	"time"
 )
 
-// SensorStatusType represents the current state of a sensor
-type SensorStatusType string
-
-const (
-	StatusActive   SensorStatusType = "ACTIVE"
-	StatusDegraded SensorStatusType = "DEGRADED"
-	StatusDead     SensorStatusType = "DEAD"
-)
-
-// SensorInfo contains all information about a registered sensor
-type SensorInfo struct {
-	ID               string
-	Name             string
-	Description      string
-	GracefulPeriod   int64
-	FailurePeriod    int64
-	Labels           map[string]string
-	RegisteredAt     int64
-}
-
-// SensorState tracks the current state of a sensor
-type SensorState struct {
-	Info            *SensorInfo
-	LastOkTimestamp int64
-	LastUpdated     int64
-	Metadata        map[string]string
-}
-
-// SensorStorage defines the interface for sensor persistence
-type SensorStorage interface {
-	Register(sensor *SensorInfo) error
-	SendData(sensorID string, ok bool, metadata map[string]string) error
-	GetStatus(sensorID string) (*SensorState, error)
-	QueryByPath(path string) ([]string, error)
-	QueryByLabels(labels map[string]string) ([]string, error)
-	QueryAll() ([]string, error)
-}
-
 // MemorySensorStorage implements SensorStorage using in-memory maps
 type MemorySensorStorage struct {
-	sensors        map[string]*SensorState
-	labelsIndex    map[string]map[string]bool
-	pathIndex      map[string]map[string]bool
-	mu             sync.RWMutex
+	sensors map[string]*SensorState
+	mu      sync.RWMutex
 }
 
 // NewMemorySensorStorage creates a new in-memory sensor storage
 func NewMemorySensorStorage() *MemorySensorStorage {
 	return &MemorySensorStorage{
-		sensors:    make(map[string]*SensorState),
-		labelsIndex: make(map[string]map[string]bool),
-		pathIndex:   make(map[string]map[string]bool),
+		sensors: make(map[string]*SensorState),
 	}
 }
 
 // Register adds a new sensor to the storage
-func (m *MemorySensorStorage) Register(sensor *SensorInfo) error {
+func (m *MemorySensorStorage) Register(ctx context.Context, sensor *SensorInfo) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -69,16 +28,30 @@ func (m *MemorySensorStorage) Register(sensor *SensorInfo) error {
 		return &DuplicateSensorError{SensorID: sensor.ID}
 	}
 
+	// Enforce unique (Namespace, Name) constraint
+	for _, existing := range m.sensors {
+		// Note: Assuming you add Namespace to SensorInfo. If not, just check Name.
+		if existing.Info.Name == sensor.Name {
+			return &DuplicateSensorError{SensorID: sensor.Name + " (name already in use)"}
+		}
+	}
+
 	now := time.Now().Unix()
 
-	sensorState := &SensorState{
+	// Deep copy labels
+	labels := make(map[string]string)
+	for k, v := range sensor.Labels {
+		labels[k] = v
+	}
+
+	m.sensors[sensor.ID] = &SensorState{
 		Info: &SensorInfo{
 			ID:             sensor.ID,
 			Name:           sensor.Name,
 			Description:    sensor.Description,
 			GracefulPeriod: sensor.GracefulPeriod,
 			FailurePeriod:  sensor.FailurePeriod,
-			Labels:         make(map[string]string),
+			Labels:         labels,
 			RegisteredAt:   now,
 		},
 		LastOkTimestamp: now,
@@ -86,37 +59,44 @@ func (m *MemorySensorStorage) Register(sensor *SensorInfo) error {
 		Metadata:        make(map[string]string),
 	}
 
-	// Store sensor
-	m.sensors[sensor.ID] = sensorState
+	return nil
+}
 
-	// Index by labels
-	if sensor.Labels != nil {
-		if m.labelsIndex[sensor.ID] == nil {
-			m.labelsIndex[sensor.ID] = make(map[string]bool)
-		}
-		for key, value := range sensor.Labels {
-			m.labelsIndex[sensor.ID][key] = true
-			if m.labelsIndex[key] == nil {
-				m.labelsIndex[key] = make(map[string]bool)
+// Update modifies an existing sensor by its unique ID
+func (m *MemorySensorStorage) Update(ctx context.Context, sensorID string, updates *SensorInfo, updateMask []string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	state, exists := m.sensors[sensorID]
+	if !exists {
+		return &SensorNotFoundError{SensorID: sensorID}
+	}
+
+	for _, field := range updateMask {
+		switch field {
+		case "name":
+			state.Info.Name = updates.Name
+		case "description":
+			state.Info.Description = updates.Description
+		case "graceful_period_seconds": // matching proto field name convention
+			state.Info.GracefulPeriod = updates.GracefulPeriod
+		case "failure_period_seconds":
+			state.Info.FailurePeriod = updates.FailurePeriod
+		case "labels":
+			labels := make(map[string]string)
+			for k, v := range updates.Labels {
+				labels[k] = v
 			}
-			m.labelsIndex[key][value]	= true
+			state.Info.Labels = labels
 		}
 	}
 
-	// Index by path (using sensor name as base path)
-	if m.pathIndex[sensor.ID] == nil {
-		m.pathIndex[sensor.ID] = make(map[string]bool)
-	}
-	m.pathIndex[sensor.ID][sensor.ID] = true
-	if sensor.Name != "" {
-		m.pathIndex[sensor.ID][sensor.Name] = true
-	}
-
+	state.LastUpdated = time.Now().Unix()
 	return nil
 }
 
 // SendData updates the last OK timestamp and last update timestamp for a sensor
-func (m *MemorySensorStorage) SendData(sensorID string, ok bool, metadata map[string]string) error {
+func (m *MemorySensorStorage) SendData(ctx context.Context, sensorID string, ok bool, metadata map[string]string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -140,7 +120,7 @@ func (m *MemorySensorStorage) SendData(sensorID string, ok bool, metadata map[st
 }
 
 // GetStatus returns the current status and metadata for a sensor
-func (m *MemorySensorStorage) GetStatus(sensorID string) (*SensorState, error) {
+func (m *MemorySensorStorage) GetStatus(ctx context.Context, sensorID string) (*SensorState, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -152,74 +132,56 @@ func (m *MemorySensorStorage) GetStatus(sensorID string) (*SensorState, error) {
 	return state, nil
 }
 
-// QueryByPath returns sensor IDs matching the given path pattern
-func (m *MemorySensorStorage) QueryByPath(path string) ([]string, error) {
+// GetByNaturalKey allows the service layer to translate human inputs into an ID
+func (m *MemorySensorStorage) GetByNaturalKey(ctx context.Context, namespace string, name string) (*SensorState, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	var results []string
-
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	if path == "" {
-		for id := range m.sensors {
-			results = append(results, id)
-		}
-		return results, nil
-	}
-
-	for id, paths := range m.pathIndex {
-		for foundPath := range paths {
-			if matchesPath(foundPath, path) {
-				results = append(results, id)
-				break
-			}
+	for _, state := range m.sensors {
+		// Assuming Namespace gets added to SensorInfo.
+		if state.Info.Name == name {
+			return state, nil
 		}
 	}
 
-	return results, nil
+	return nil, &SensorNotFoundError{SensorID: name}
 }
 
-// QueryByLabels returns sensor IDs that have all specified labels
-func (m *MemorySensorStorage) QueryByLabels(labels map[string]string) ([]string, error) {
+// Query returns all sensors matching the broader filter criteria
+func (m *MemorySensorStorage) Query(ctx context.Context, filter QueryFilter) ([]*SensorState, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	targetLabels := labels
-	if targetLabels == nil {
-		targetLabels = make(map[string]string)
-	}
-
-	var results []string
+	var results []*SensorState
 
 outer:
-	for sensorID, sensorState := range m.sensors {
-		if sensorState.Info.Labels == nil {
+	for _, state := range m.sensors {
+		if filter.ID != "" && state.Info.ID != filter.ID {
 			continue
 		}
 
-		for key, value := range targetLabels {
-			if sensorState.Info.Labels[key] != value {
-				continue outer
+		if filter.Path != "" && !matchesPath(state.Info.Name, filter.Path) {
+			continue
+		}
+
+		if len(filter.Labels) > 0 {
+			if state.Info.Labels == nil {
+				continue
+			}
+			for k, v := range filter.Labels {
+				if state.Info.Labels[k] != v {
+					continue outer
+				}
 			}
 		}
 
-		results = append(results, sensorID)
+		// Note: Filtering by calculated Status requires evaluating the age here
+		// If you want to support filter.Status, you'll need to calculate it for the state
+		// and compare it, just like calculateSensorStatus does in your server layer.
+
+		results = append(results, state)
 	}
 
-	return results, nil
-}
-
-// QueryAll returns all registered sensor IDs
-func (m *MemorySensorStorage) QueryAll() ([]string, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	var results []string
-	for id := range m.sensors {
-		results = append(results, id)
-	}
 	return results, nil
 }
 
@@ -238,22 +200,4 @@ func matchesPath(foundPath, path string) bool {
 		}
 	}
 	return false
-}
-
-// DuplicateSensorError is returned when trying to register a duplicate sensor
-type DuplicateSensorError struct {
-	SensorID string
-}
-
-func (e *DuplicateSensorError) Error() string {
-	return "sensor with ID " + e.SensorID + " already exists"
-}
-
-// SensorNotFoundError is returned when querying a non-existent sensor
-type SensorNotFoundError struct {
-	SensorID string
-}
-
-func (e *SensorNotFoundError) Error() string {
-	return "sensor with ID " + e.SensorID + " not found"
 }

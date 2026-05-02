@@ -14,9 +14,9 @@ func TestRegisterSensor_New(t *testing.T) {
 	strg := storage.NewMemorySensorStorage()
 	impl := NewStatusMonitorService(strg)
 
-	sensor := &v1.SensorInfo{
-		SensorId:              "sensor-1",
-		SensorName:            "Sensor One",
+	spec := &v1.SensorSpec{
+		Id:                    "sensor-1",
+		Name:                  "Sensor One",
 		Description:           "First sensor",
 		GracefulPeriodSeconds: 60,
 		FailurePeriodSeconds:  120,
@@ -26,12 +26,12 @@ func TestRegisterSensor_New(t *testing.T) {
 		},
 	}
 
-	req := &v1.RegisterSensorRequest{Sensor: sensor}
+	req := &v1.RegisterSensorRequest{Spec: spec}
 	resp, err := impl.RegisterSensor(context.Background(), req)
 
 	assert.NoError(t, err)
 	assert.True(t, resp.Success)
-	assert.Equal(t, "sensor-1", resp.SensorId)
+	assert.Equal(t, "sensor-1", resp.Id)
 	assert.NotZero(t, resp.Timestamp)
 }
 
@@ -40,15 +40,15 @@ func TestRegisterSensor_EmptySensorID(t *testing.T) {
 	impl := NewStatusMonitorService(strg)
 
 	req := &v1.RegisterSensorRequest{
-		Sensor: &v1.SensorInfo{
-			SensorId: "",
+		Spec: &v1.SensorSpec{
+			Id: "",
 		},
 	}
 
 	resp, err := impl.RegisterSensor(context.Background(), req)
 	assert.NoError(t, err)
 	assert.True(t, resp.Success)
-	assert.NotEqual(t, "", resp.SensorId)
+	assert.NotEqual(t, "", resp.Id)
 }
 
 func TestSendSensorData(t *testing.T) {
@@ -56,22 +56,22 @@ func TestSendSensorData(t *testing.T) {
 	impl := NewStatusMonitorService(strg)
 
 	// Register first
-	sensor := &v1.SensorInfo{
-		SensorId:              "sensor-2",
-		SensorName:            "Sensor Two",
+	spec := &v1.SensorSpec{
+		Id:                    "sensor-2",
+		Name:                  "Sensor Two",
 		GracefulPeriodSeconds: 60,
 		FailurePeriodSeconds:  120,
 	}
 
-	req := &v1.RegisterSensorRequest{Sensor: sensor}
+	req := &v1.RegisterSensorRequest{Spec: spec}
 	resp, err := impl.RegisterSensor(context.Background(), req)
 	assert.NoError(t, err)
 	assert.True(t, resp.Success)
 
 	// Send OK data
 	sendReq := &v1.ReportSensorRequest{
-		SensorId: "sensor-2",
-		Data:     map[string]string{},
+		Id:   "sensor-2",
+		Data: map[string]string{},
 	}
 	sendResp, err := impl.ReportSensor(context.Background(), sendReq)
 	assert.NoError(t, err)
@@ -80,13 +80,13 @@ func TestSendSensorData(t *testing.T) {
 
 	// Send failure data
 	sendReq2 := &v1.ReportSensorRequest{
-		SensorId: "sensor-2",
-		Data:     map[string]string{},
+		Id:   "sensor-2",
+		Data: map[string]string{},
 	}
 	sendResp2, err := impl.ReportSensor(context.Background(), sendReq2)
 	assert.NoError(t, err)
 	assert.True(t, sendResp2.Success)
-	assert.Equal(t, "sensor-2", sendResp2.SensorId)
+	assert.Equal(t, "sensor-2", sendResp2.Id)
 
 }
 
@@ -95,14 +95,14 @@ func TestSendSensorData_NonExistent(t *testing.T) {
 	impl := NewStatusMonitorService(strg)
 
 	req := &v1.ReportSensorRequest{
-		SensorId: "non-existent",
-		Data:     map[string]string{},
+		Id:   "non-existent",
+		Data: map[string]string{},
 	}
 	resp, err := impl.ReportSensor(context.Background(), req)
 
 	assert.Error(t, err)
 	assert.False(t, resp.Success)
-	assert.Equal(t, "non-existent", resp.SensorId)
+	assert.Equal(t, "non-existent", resp.Id)
 }
 
 func TestQuerySensors(t *testing.T) {
@@ -112,9 +112,9 @@ func TestQuerySensors(t *testing.T) {
 	// Register multiple sensors
 	for i := 1; i <= 5; i++ {
 		sensorId := "sensor-" + string(rune('0'+i))
-		sensor := &v1.SensorInfo{
-			SensorId:              sensorId,
-			SensorName:            "Sensor " + string(rune('0'+i)),
+		spec := &v1.SensorSpec{
+			Id:                    sensorId,
+			Name:                  "Sensor " + string(rune('0'+i)),
 			GracefulPeriodSeconds: 60,
 			FailurePeriodSeconds:  120,
 			Labels: []*v1.Label{
@@ -122,14 +122,14 @@ func TestQuerySensors(t *testing.T) {
 				{Key: "instance", Value: "instance-" + string(rune('0'+i))},
 			},
 		}
-		req := &v1.RegisterSensorRequest{Sensor: sensor}
+		req := &v1.RegisterSensorRequest{Spec: spec}
 		_, err := impl.RegisterSensor(context.Background(), req)
 		assert.NoError(t, err)
 
 		// Send OK data
 		sendReq := &v1.ReportSensorRequest{
-			SensorId: sensorId,
-			Data:     map[string]string{},
+			Id:   sensorId,
+			Data: map[string]string{},
 		}
 		_, err = impl.ReportSensor(context.Background(), sendReq)
 		assert.NoError(t, err)
@@ -141,9 +141,9 @@ func TestQuerySensors(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.Greater(t, len(queryResp.Sensors), 0)
-	for _, status := range queryResp.Sensors {
-		assert.Equal(t, "ACTIVE", status.Status)
-		assert.NotZero(t, status.LastOkTimestamp)
+	for _, sensor := range queryResp.Sensors {
+		assert.Equal(t, "ACTIVE", sensor.Status.State)
+		assert.NotZero(t, sensor.Status.LastOkTimestamp)
 	}
 
 	// Query all ACTIVE sensors (status filter)
@@ -155,64 +155,63 @@ func TestQuerySensors(t *testing.T) {
 
 	if len(queryResp.Sensors) > 0 {
 		assert.GreaterOrEqual(t, len(queryRespActive.Sensors), 1)
-		for _, status := range queryRespActive.Sensors {
-			assert.Equal(t, "ACTIVE", status.Status)
+		for _, sensor := range queryRespActive.Sensors {
+			assert.Equal(t, "ACTIVE", sensor.Status.State)
 		}
 	}
 }
 
-func TestQuerySensors_ByPath(t *testing.T) {
+func TestQuerySensors_ById(t *testing.T) {
 	strg := storage.NewMemorySensorStorage()
 	impl := NewStatusMonitorService(strg)
 
-	// Register sensors with different patterns
-	sensors := []*v1.SensorInfo{
+	// Register sensors
+	specs := []*v1.SensorSpec{
 		{
-			SensorId:              "prefix-a-sensor-1",
-			SensorName:            "prefix-a-sensor",
+			Id:                    "prefix-a-sensor-1",
+			Name:                  "prefix-a-sensor",
 			GracefulPeriodSeconds: 60,
 		},
 		{
-			SensorId:              "prefix-b-sensor-2",
-			SensorName:            "prefix-b-sensor",
+			Id:                    "prefix-b-sensor-2",
+			Name:                  "prefix-b-sensor",
 			GracefulPeriodSeconds: 60,
 		},
 		{
-			SensorId:              "other-sensor-3",
-			SensorName:            "other-sensor",
+			Id:                    "other-sensor-3",
+			Name:                  "other-sensor",
 			GracefulPeriodSeconds: 60,
 		},
 	}
 
-	for _, sensor := range sensors {
-		req := &v1.RegisterSensorRequest{Sensor: sensor}
+	for _, spec := range specs {
+		req := &v1.RegisterSensorRequest{Spec: spec}
 		_, err := impl.RegisterSensor(context.Background(), req)
 		assert.NoError(t, err)
 
 		sendReq := &v1.ReportSensorRequest{
-			SensorId: sensor.SensorId,
-			Data:     map[string]string{},
+			Id:   spec.Id,
+			Data: map[string]string{},
 		}
 		_, err = impl.ReportSensor(context.Background(), sendReq)
 		assert.NoError(t, err)
 	}
-	
+
 	// Query by exact sensor ID
 	queryReqExact := &v1.QuerySensorsRequest{
-		Path: "prefix-a-sensor-1",
+		Id: "prefix-a-sensor-1",
 	}
 	queryRespExact, err := impl.QuerySensors(context.Background(), queryReqExact)
 	assert.NoError(t, err)
 
 	assert.Greater(t, len(queryRespExact.Sensors), 0)
 	filteredCount := 0
-	for _, status := range queryRespExact.Sensors {
-		if status.SensorId == "prefix-a-sensor-1" {
+	for _, sensor := range queryRespExact.Sensors {
+		if sensor.Id == "prefix-a-sensor-1" {
 			filteredCount++
 		}
 	}
 	assert.Equal(t, 1, filteredCount)
-
 }
 
 func TestQuerySensors_ByLabels(t *testing.T) {
@@ -220,10 +219,10 @@ func TestQuerySensors_ByLabels(t *testing.T) {
 	impl := NewStatusMonitorService(strg)
 
 	// Register sensors with different labels
-	sensors := []*v1.SensorInfo{
+	specs := []*v1.SensorSpec{
 		{
-			SensorId:              "sensor-1",
-			SensorName:            "Sensor One",
+			Id:                    "sensor-1",
+			Name:                  "Sensor One",
 			GracefulPeriodSeconds: 60,
 			Labels: []*v1.Label{
 				{Key: "app", Value: "web"},
@@ -231,8 +230,8 @@ func TestQuerySensors_ByLabels(t *testing.T) {
 			},
 		},
 		{
-			SensorId:              "sensor-2",
-			SensorName:            "Sensor Two",
+			Id:                    "sensor-2",
+			Name:                  "Sensor Two",
 			GracefulPeriodSeconds: 60,
 			Labels: []*v1.Label{
 				{Key: "app", Value: "api"},
@@ -241,14 +240,14 @@ func TestQuerySensors_ByLabels(t *testing.T) {
 		},
 	}
 
-	for _, sensor := range sensors {
-		req := &v1.RegisterSensorRequest{Sensor: sensor}
+	for _, spec := range specs {
+		req := &v1.RegisterSensorRequest{Spec: spec}
 		_, err := impl.RegisterSensor(context.Background(), req)
 		assert.NoError(t, err)
 
 		sendReq := &v1.ReportSensorRequest{
-			SensorId: sensor.SensorId,
-			Data:     map[string]string{},
+			Id:   spec.Id,
+			Data: map[string]string{},
 		}
 		_, err = impl.ReportSensor(context.Background(), sendReq)
 		assert.NoError(t, err)
@@ -264,10 +263,10 @@ func TestQuerySensors_ByLabels(t *testing.T) {
 	assert.NoError(t, err)
 
 	filteredCount := 0
-	for _, status := range queryResp.Sensors {
-		if status.SensorId == "sensor-1" {
+	for _, sensor := range queryResp.Sensors {
+		if sensor.Id == "sensor-1" {
 			filteredCount++
-			assert.Equal(t, "ACTIVE", status.Status)
+			assert.Equal(t, "ACTIVE", sensor.Status.State)
 		}
 	}
 	assert.Greater(t, filteredCount, 0)
@@ -283,8 +282,8 @@ func TestQuerySensors_ByLabels(t *testing.T) {
 	assert.NoError(t, err)
 
 	filteredMultiple := 0
-	for _, status := range queryRespMultiple.Sensors {
-		if status.SensorId == "sensor-1" { // Only sensor-1 matches both labels
+	for _, sensor := range queryRespMultiple.Sensors {
+		if sensor.Id == "sensor-1" { // Only sensor-1 matches both labels
 			filteredMultiple++
 		}
 	}
@@ -357,8 +356,8 @@ func TestStatusCalculation(t *testing.T) {
 }
 
 func TestRegisterSensor_InvalidPeriods(t *testing.T) {
-	storage := storage.NewMemorySensorStorage()
-	impl := NewStatusMonitorService(storage)
+	strg := storage.NewMemorySensorStorage()
+	impl := NewStatusMonitorService(strg)
 
 	tests := []struct {
 		name        string
@@ -388,14 +387,14 @@ func TestRegisterSensor_InvalidPeriods(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sensor := &v1.SensorInfo{
-				SensorId:              "", // each time new ID, like in Kubernetes objectId
-				SensorName:            "Test Sensor",
+			spec := &v1.SensorSpec{
+				Id:                    "",                         // each time new ID, like in Kubernetes objectId
+				Name:                  "Test Sensor - " + tt.name, // <-- Make name unique per test case
 				GracefulPeriodSeconds: tt.graceful,
 				FailurePeriodSeconds:  tt.failure,
 			}
 
-			req := &v1.RegisterSensorRequest{Sensor: sensor}
+			req := &v1.RegisterSensorRequest{Spec: spec}
 			resp, err := impl.RegisterSensor(context.Background(), req)
 
 			if tt.shouldError {

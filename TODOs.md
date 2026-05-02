@@ -34,6 +34,7 @@ The project must be in Go. Pages must be as static as possible (eg. generated pe
 It must be HTTP gateway, with protobuf and gRPC, and postgres as backend for storage
 
 
+Sensorcli will communicate over gRPC - it must have basic functionality to read,update,list sensors
 
 # TODOs
 

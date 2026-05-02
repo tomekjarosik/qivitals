@@ -22,23 +22,24 @@ func NewStatusMonitorService(storage storage.SensorStorage) *StatusMonitorServic
 
 func (s *StatusMonitorService) RegisterSensor(ctx context.Context, req *v1.RegisterSensorRequest) (*v1.RegisterSensorResponse, error) {
 	sensor := &storage.SensorInfo{
-		ID:             req.Sensor.SensorId,
-		Name:           req.Sensor.SensorName,
-		Description:    req.Sensor.Description,
-		GracefulPeriod: req.Sensor.GracefulPeriodSeconds,
-		FailurePeriod:  req.Sensor.FailurePeriodSeconds,
-		Labels:         convertLabels(req.Sensor.Labels),
+		ID:             req.Spec.Id,
+		Name:           req.Spec.Name,
+		Description:    req.Spec.Description,
+		GracefulPeriod: req.Spec.GracefulPeriodSeconds,
+		FailurePeriod:  req.Spec.FailurePeriodSeconds,
+		Labels:         convertLabels(req.Spec.Labels),
 	}
 
 	if sensor.ID == "" {
 		sensor.ID = uuid.New().String()
 	}
 
-	if err := s.storage.Register(sensor); err != nil {
+	// Pass context to the new storage interface
+	if err := s.storage.Register(ctx, sensor); err != nil {
 		if _, ok := err.(*storage.DuplicateSensorError); ok {
 			timestamp := time.Now().Unix()
 			return &v1.RegisterSensorResponse{
-				SensorId:  sensor.ID,
+				Id:        sensor.ID,
 				Success:   false,
 				Timestamp: timestamp,
 			}, err
@@ -48,18 +49,19 @@ func (s *StatusMonitorService) RegisterSensor(ctx context.Context, req *v1.Regis
 
 	timestamp := time.Now().Unix()
 	return &v1.RegisterSensorResponse{
-		SensorId:  sensor.ID,
+		Id:        sensor.ID,
 		Success:   true,
 		Timestamp: timestamp,
 	}, nil
 }
 
 func (s *StatusMonitorService) ReportSensor(ctx context.Context, req *v1.ReportSensorRequest) (*v1.ReportSensorResponse, error) {
-	if err := s.storage.SendData(req.SensorId, true, req.Data); err != nil {
+	// Pass context to the new storage interface
+	if err := s.storage.SendData(ctx, req.Id, true, req.Data); err != nil {
 		if _, ok := err.(*storage.SensorNotFoundError); ok {
 			timestamp := time.Now().Unix()
 			return &v1.ReportSensorResponse{
-				SensorId:  req.SensorId,
+				Id:        req.Id,
 				Success:   false,
 				Timestamp: timestamp,
 			}, err
@@ -69,38 +71,72 @@ func (s *StatusMonitorService) ReportSensor(ctx context.Context, req *v1.ReportS
 
 	timestamp := time.Now().Unix()
 	return &v1.ReportSensorResponse{
-		SensorId:  req.SensorId,
+		Id:        req.Id,
 		Success:   true,
 		Timestamp: timestamp,
 	}, nil
 }
 
 func (s *StatusMonitorService) QuerySensors(ctx context.Context, req *v1.QuerySensorsRequest) (*v1.QuerySensorsResponse, error) {
-	sensorIDs, err := s.storage.QueryByPath(req.Path)
+	// 1. Build the filter using the new storage.QueryFilter structure
+	filter := storage.QueryFilter{
+		Namespace: req.Namespace,
+		ID:        req.Id,
+		Labels:    convertLabels(req.Labels),
+	}
+
+	// 2. Fetch all matching full states in ONE call (solves the N+1 problem!)
+	states, err := s.storage.Query(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
 
-	statuses := make([]*v1.SensorStatus, 0)
+	// 3. Map the storage models to the protobuf response models
+	sensors := make([]*v1.Sensor, 0, len(states))
+	for _, state := range states {
+		computedState := calculateSensorStatus(state)
 
-	for _, sensorID := range sensorIDs {
-		state, err := s.storage.GetStatus(sensorID)
-		if err != nil {
+		// If the request specifically filtered by status, we can enforce it here
+		if req.Status != "" && req.Status != computedState {
 			continue
 		}
 
-		sensorStatus := calculateSensorStatus(state)
+		// Convert storage labels to proto labels
+		var protoLabels []*v1.Label
+		if state.Info.Labels != nil {
+			for k, v := range state.Info.Labels {
+				protoLabels = append(protoLabels, &v1.Label{Key: k, Value: v})
+			}
+		}
 
-		statuses = append(statuses, &v1.SensorStatus{
-			SensorId:             state.Info.ID,
-			Status:               sensorStatus,
+		// Build the Spec part
+		spec := &v1.SensorSpec{
+			Id: state.Info.ID,
+			// Note: If you added Namespace to storage.SensorInfo, use state.Info.Namespace here
+			Name:                  state.Info.Name,
+			Description:           state.Info.Description,
+			GracefulPeriodSeconds: state.Info.GracefulPeriod,
+			FailurePeriodSeconds:  state.Info.FailurePeriod,
+			Labels:                protoLabels,
+		}
+
+		// Build the Status part, mapping the stored Metadata to ReportedData
+		status := &v1.SensorStatus{
+			State:                computedState,
 			LastOkTimestamp:      state.LastOkTimestamp,
 			LastUpdatedTimestamp: state.LastUpdated,
+			ReportedData:         state.Metadata,
+		}
+
+		sensors = append(sensors, &v1.Sensor{
+			Id:     state.Info.ID,
+			Spec:   spec,
+			Status: status,
 		})
 	}
 
 	return &v1.QuerySensorsResponse{
-		Sensors: statuses,
+		Sensors: sensors,
 	}, nil
 }
 
