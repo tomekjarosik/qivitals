@@ -49,20 +49,24 @@ func TestIntegration_EndToEndFlow(t *testing.T) {
 
 	// --- Step A: Register a new sensor ---
 	regResp, err := client.RegisterSensor(ctx, &v1.RegisterSensorRequest{
-		Spec: &v1.SensorSpec{ // Updated from Sensor: &v1.SensorInfo
-			Name:                  "integration-test-job",
-			Description:           "Testing end-to-end flow",
-			GracefulPeriodSeconds: 300,
-			FailurePeriodSeconds:  600,
-			Labels: []*v1.Label{
-				{Key: "env", Value: "test"},
+		Sensor: &v1.Sensor{
+			Metadata: &v1.ObjectMeta{
+				Name:        "integration-test-job",
+				Description: "Testing end-to-end flow",
+				Labels: map[string]string{
+					"env": "test",
+				},
+			},
+			Spec: &v1.SensorSpec{
+				GracefulPeriodSeconds: 300,
+				FailurePeriodSeconds:  600,
 			},
 		},
 	})
 	require.NoError(t, err, "Failed to register sensor")
-	require.True(t, regResp.Success)
+	require.NotNil(t, regResp.Sensor)
 
-	sensorID := regResp.Id
+	sensorID := regResp.Sensor.Metadata.Id
 	require.NotEmpty(t, sensorID, "Expected a generated sensor ID")
 
 	// --- Step B: Report data for the sensor ---
@@ -73,7 +77,7 @@ func TestIntegration_EndToEndFlow(t *testing.T) {
 		},
 	})
 	require.NoError(t, err, "Failed to report sensor data")
-	require.True(t, reportResp.Success)
+	require.NotNil(t, reportResp.Sensor)
 
 	// --- Step C: Query the sensor and verify status ---
 	queryResp, err := client.QuerySensors(ctx, &v1.QuerySensorsRequest{
@@ -83,7 +87,7 @@ func TestIntegration_EndToEndFlow(t *testing.T) {
 	require.Len(t, queryResp.Sensors, 1, "Expected exactly 1 sensor in response")
 
 	sensor := queryResp.Sensors[0]
-	assert.Equal(t, sensorID, sensor.Id)
+	assert.Equal(t, sensorID, sensor.Metadata.Id)
 
 	// Ensure the nested Status object exists
 	require.NotNil(t, sensor.Status, "Expected Sensor to have a Status object")

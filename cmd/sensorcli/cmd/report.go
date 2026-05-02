@@ -51,13 +51,9 @@ func runReport(cmd *cobra.Command, _ []string, sensorID string, data map[string]
 		return fmt.Errorf("failed to report sensor data: %w", err)
 	}
 
-	if response.Success {
-		fmt.Printf("Report sent successfully. Sensor: %s, Timestamp: %s\n",
-			response.Id,
-			time.Unix(response.Timestamp, 0).Format("2006-01-02 15:04:05"))
-	} else {
-		return fmt.Errorf("sensor '%s' not found", sensorID)
-	}
+	fmt.Printf("Report sent successfully. Sensor: %s, Timestamp: %s\n",
+		response.Sensor.Metadata.Id,
+		time.Unix(response.Sensor.Status.LastOkTimestamp, 0).Format("2006-01-02 15:04:05"))
 
 	return nil
 }

@@ -20,14 +20,12 @@ func NewCmdDelete() *cobra.Command {
 			}
 			defer conn.Close()
 
-			resp, err := client.DeleteSensor(cmd.Context(), &v1.DeleteSensorRequest{Id: id})
+			_, err = client.DeleteSensor(cmd.Context(), &v1.DeleteSensorRequest{Id: id})
 			if err != nil {
 				return fmt.Errorf("failed to delete sensor: %w", err)
 			}
+			fmt.Printf("Sensor '%s' deleted successfully.\n", id)
 
-			if resp.Success {
-				fmt.Printf("Sensor '%s' deleted successfully.\n", id)
-			}
 			return nil
 		},
 	}

@@ -7,102 +7,90 @@ option go_package = "github.com/tomekjarosik/one-status/api/statussvc/v1";
 import "google/api/annotations.proto";
 import "google/protobuf/field_mask.proto";
 
-message Label {
-  string key = 1;
-  string value = 2;
-}
-
-// SensorSpec represents the configuration and metadata of a sensor
-message SensorSpec {
+// ObjectMeta contains the identity and grouping information for a sensor.
+message ObjectMeta {
   string id = 1;
   string namespace = 2;
   string name = 3;
   string description = 4;
-  int64 graceful_period_seconds = 5;
-  int64 failure_period_seconds = 6;
-  repeated Label labels = 7;
+  map<string, string> labels = 5; // Native map replaces the old Label message
 }
 
-// SensorStatus represents the observed runtime state of the sensor
+// SensorSpec contains ONLY the desired configuration.
+message SensorSpec {
+  int64 graceful_period_seconds = 1;
+  int64 failure_period_seconds = 2;
+}
+
+// SensorStatus contains ONLY the observed runtime state.
 message SensorStatus {
-  // The computed state of the sensor (e.g., "ACTIVE", "DEGRADED", "DEAD")
-  string state = 1;
-
-  int64 last_ok_timestamp = 2;
-  int64 last_updated_timestamp = 3;
-
-  // The most recent generic telemetry/data reported by the sensor.
-  // Example: {"disk_usage": "80", "cpu_temp": "65"}
-  map<string, string> reported_data = 4;
+  string state = 1;             // Computed state: "ACTIVE", "DEGRADED", "DEAD"
+  string message = 2;           // Human-readable reason (e.g., "Disk 95% full")
+  int64 last_ok_timestamp = 3;
+  int64 last_updated_timestamp = 4;
+  map<string, string> reported_data = 5; // Generic telemetry
 }
 
-// Sensor represents the complete object, combining its Spec and current runtime Status
+// Sensor is the top-level entity representing the entire resource.
 message Sensor {
-  string id = 1;
+  ObjectMeta metadata = 1;
   SensorSpec spec = 2;
   SensorStatus status = 3;
 }
 
+// --- RPC Requests & Responses ---
+
 message RegisterSensorRequest {
-  SensorSpec spec = 1;
+  Sensor sensor = 1;
 }
 
 message RegisterSensorResponse {
-  string id = 1;
-  bool success = 2;
-  int64 timestamp = 3;
+  Sensor sensor = 1; // Returns the fully initialized sensor (with ID and timestamps)
 }
 
 message UpdateSensorRequest {
-  SensorSpec spec = 1;
+  Sensor sensor = 1;
   google.protobuf.FieldMask update_mask = 2;
 }
 
 message UpdateSensorResponse {
-  SensorSpec spec = 1;
-  bool success = 2;
+  Sensor sensor = 1; // Returns the updated sensor
 }
 
 message ReportSensorRequest {
+  // Allow reporting by UUID OR by Natural Key (Namespace + Name)
   string id = 1;
-  map<string, string> data = 2;
+  string namespace = 2;
+  string name = 3;
+
+  string message = 4; // E.g., "Database backup completed successfully in 14s"
+  map<string, string> data = 5;
 }
 
 message ReportSensorResponse {
-  string id = 1;
-  bool success = 2;
-  int64 timestamp = 3;
+  Sensor sensor = 1; // Returns the newly calculated state immediately!
 }
 
 message DeleteSensorRequest {
   string id = 1;
 }
 
-message DeleteSensorResponse {
-  bool success = 1;
-}
+// An empty response indicates success. If it fails, a gRPC error is returned.
+message DeleteSensorResponse {}
 
 message QuerySensorsRequest {
   string id = 1;
   string namespace = 2;
   string name = 3;
-
-  // Free-text search across name and description
   string search = 4;
 
-  // Exact key=value matches (Postgres: labels @> '{"env":"prod"}')
-  repeated Label labels = 5;
-
-  // Must contain these keys, values don't matter (Postgres: labels ? 'critical')
+  map<string, string> labels = 5;
   repeated string has_label_keys = 6;
-
-  // Filter by multiple statuses (e.g. ["DEGRADED", "DEAD"])
   repeated string statuses = 7;
 
-  // Pagination & Sorting
   int32 page_size = 8;
   string page_token = 9;
-  string order_by = 10; // e.g., "last_updated", "name"
+  string order_by = 10;
   bool order_desc = 11;
 }
 
@@ -110,6 +98,8 @@ message QuerySensorsResponse {
   repeated Sensor sensors = 1;
   string next_page_token = 2;
 }
+
+// --- Service Definition ---
 
 service StatusService {
 
@@ -122,7 +112,8 @@ service StatusService {
 
   rpc UpdateSensor(UpdateSensorRequest) returns (UpdateSensorResponse) {
     option (google.api.http) = {
-      patch: "/api/v1/sensors/{spec.id}"
+      // Notice the path uses metadata.id to match the nested structure!
+      patch: "/api/v1/sensors/{sensor.metadata.id}"
       body: "*"
     };
   }

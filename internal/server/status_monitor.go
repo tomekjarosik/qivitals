@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
+	v1 "github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
 	"github.com/tomekjarosik/one-status/internal/storage"
 )
 
@@ -22,62 +22,70 @@ func NewStatusMonitorService(storage storage.SensorStorage) *StatusMonitorServic
 }
 
 func (s *StatusMonitorService) RegisterSensor(ctx context.Context, req *v1.RegisterSensorRequest) (*v1.RegisterSensorResponse, error) {
-	sensor := &storage.SensorInfo{
-		ID:             req.Spec.Id,
-		Name:           req.Spec.Name,
-		Namespace:      req.Spec.Namespace,
-		Description:    req.Spec.Description,
-		GracefulPeriod: req.Spec.GracefulPeriodSeconds,
-		FailurePeriod:  req.Spec.FailurePeriodSeconds,
-		Labels:         convertLabels(req.Spec.Labels),
+	if req.Sensor == nil || req.Sensor.Metadata == nil || req.Sensor.Spec == nil {
+		return nil, errors.New("sensor metadata and spec are required")
 	}
 
-	if sensor.ID == "" {
-		sensor.ID = uuid.New().String()
+	sensorInfo := &storage.SensorInfo{
+		ID:             req.Sensor.Metadata.Id,
+		Name:           req.Sensor.Metadata.Name,
+		Namespace:      req.Sensor.Metadata.Namespace,
+		Description:    req.Sensor.Metadata.Description,
+		GracefulPeriod: req.Sensor.Spec.GracefulPeriodSeconds,
+		FailurePeriod:  req.Sensor.Spec.FailurePeriodSeconds,
+		Labels:         req.Sensor.Metadata.Labels, // Maps directly now!
 	}
 
-	// Pass context to the new storage interface
-	if err := s.storage.Register(ctx, sensor); err != nil {
-		var duplicateSensorError *storage.DuplicateSensorError
-		if errors.As(err, &duplicateSensorError) {
-			timestamp := time.Now().Unix()
-			return &v1.RegisterSensorResponse{
-				Id:        sensor.ID,
-				Success:   false,
-				Timestamp: timestamp,
-			}, err
-		}
+	if sensorInfo.ID == "" {
+		sensorInfo.ID = uuid.New().String()
+	}
+
+	if err := s.storage.Register(ctx, sensorInfo); err != nil {
 		return nil, err
 	}
 
-	timestamp := time.Now().Unix()
+	// Fetch the newly registered state to return it fully populated
+	state, err := s.storage.GetStatus(ctx, sensorInfo.ID)
+	if err != nil {
+		return nil, err
+	}
+
 	return &v1.RegisterSensorResponse{
-		Id:        sensor.ID,
-		Success:   true,
-		Timestamp: timestamp,
+		Sensor: buildProtoSensor(state),
 	}, nil
 }
 
 func (s *StatusMonitorService) ReportSensor(ctx context.Context, req *v1.ReportSensorRequest) (*v1.ReportSensorResponse, error) {
-	// Pass context to the new storage interface
-	if err := s.storage.SendData(ctx, req.Id, true, req.Data); err != nil {
-		var sensorNotFoundError *storage.SensorNotFoundError
-		if errors.As(err, &sensorNotFoundError) {
-			timestamp := time.Now().Unix()
-			return &v1.ReportSensorResponse{
-				Id:        req.Id,
-				Success:   false,
-				Timestamp: timestamp,
-			}, err
+	// First resolve ID if natural key was used
+	targetID := req.Id
+	if targetID == "" && req.Namespace != "" && req.Name != "" {
+		res, err := s.storage.Query(ctx, storage.QueryFilter{Namespace: req.Namespace, Name: req.Name, Limit: 1})
+		if err != nil || len(res) == 0 {
+			return nil, errors.New("sensor not found")
 		}
+		targetID = res[0].Info.ID
+	}
+
+	if err := s.storage.SendData(ctx, targetID, true, req.Data); err != nil {
 		return nil, err
 	}
 
-	timestamp := time.Now().Unix()
+	// Fetch updated state to return to client
+	state, err := s.storage.GetStatus(ctx, targetID)
+	if err != nil {
+		return nil, err
+	}
+
+	// If the user provided a message, we can store it in the metadata map for now
+	if req.Message != "" {
+		if state.Metadata == nil {
+			state.Metadata = make(map[string]string)
+		}
+		state.Metadata["_message"] = req.Message
+	}
+
 	return &v1.ReportSensorResponse{
-		Id:        req.Id,
-		Success:   true,
-		Timestamp: timestamp,
+		Sensor: buildProtoSensor(state),
 	}, nil
 }
 
@@ -85,47 +93,42 @@ func (s *StatusMonitorService) DeleteSensor(ctx context.Context, req *v1.DeleteS
 	if err := s.storage.Delete(ctx, req.Id); err != nil {
 		var sensorNotFoundError *storage.SensorNotFoundError
 		if errors.As(err, &sensorNotFoundError) {
-			return &v1.DeleteSensorResponse{Success: false}, err
+			return nil, err // Returning gRPC error is standard
 		}
 		return nil, err
 	}
 
-	return &v1.DeleteSensorResponse{Success: true}, nil
+	return &v1.DeleteSensorResponse{}, nil
 }
 
 func (s *StatusMonitorService) QuerySensors(ctx context.Context, req *v1.QuerySensorsRequest) (*v1.QuerySensorsResponse, error) {
-	// Build the filter using the new storage.QueryFilter structure
 	filter := storage.QueryFilter{
 		ID:           req.Id,
 		Namespace:    req.Namespace,
 		Name:         req.Name,
 		Search:       req.Search,
-		Labels:       convertLabels(req.Labels),
+		Labels:       req.Labels, // Maps directly!
 		HasLabelKeys: req.HasLabelKeys,
 		Statuses:     req.Statuses,
 		OrderBy:      req.OrderBy,
 		OrderDesc:    req.OrderDesc,
 		Limit:        int(req.PageSize),
-		// Offset/Pagination via PageToken can be implemented here later
 	}
 
-	// Fetch all matching full states in ONE call
 	states, err := s.storage.Query(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
 
-	// Map the storage models to the protobuf response models
 	sensors := make([]*v1.Sensor, 0, len(states))
 	for _, state := range states {
-		computedState := calculateSensorStatus(state)
+		protoSensor := buildProtoSensor(state)
 
-		// If the request specifically filtered by status, we enforce it here
-		// (MemoryStorage defers computed status filtering to the service layer)
+		// Filter computed status if requested
 		if len(req.Statuses) > 0 {
 			statusMatch := false
 			for _, allowedStatus := range req.Statuses {
-				if computedState == allowedStatus {
+				if protoSensor.Status.State == allowedStatus {
 					statusMatch = true
 					break
 				}
@@ -135,43 +138,50 @@ func (s *StatusMonitorService) QuerySensors(ctx context.Context, req *v1.QuerySe
 			}
 		}
 
-		// Convert storage labels to proto labels
-		var protoLabels []*v1.Label
-		if state.Info.Labels != nil {
-			for k, v := range state.Info.Labels {
-				protoLabels = append(protoLabels, &v1.Label{Key: k, Value: v})
-			}
-		}
-
-		// Build the Spec part
-		spec := &v1.SensorSpec{
-			Id:                    state.Info.ID,
-			Name:                  state.Info.Name,
-			Namespace:             state.Info.Namespace,
-			Description:           state.Info.Description,
-			GracefulPeriodSeconds: state.Info.GracefulPeriod,
-			FailurePeriodSeconds:  state.Info.FailurePeriod,
-			Labels:                protoLabels,
-		}
-
-		// Build the Status part, mapping the stored Metadata to ReportedData
-		status := &v1.SensorStatus{
-			State:                computedState,
-			LastOkTimestamp:      state.LastOkTimestamp,
-			LastUpdatedTimestamp: state.LastUpdated,
-			ReportedData:         state.Metadata,
-		}
-
-		sensors = append(sensors, &v1.Sensor{
-			Id:     state.Info.ID,
-			Spec:   spec,
-			Status: status,
-		})
+		sensors = append(sensors, protoSensor)
 	}
 
 	return &v1.QuerySensorsResponse{
 		Sensors: sensors,
 	}, nil
+}
+
+// --- Helpers ---
+
+func buildProtoSensor(state *storage.SensorState) *v1.Sensor {
+	computedState := calculateSensorStatus(state)
+
+	labels := state.Info.Labels
+	if labels == nil {
+		labels = make(map[string]string)
+	}
+
+	msg := ""
+	if state.Metadata != nil {
+		msg = state.Metadata["_message"]
+		delete(state.Metadata, "_message") // Hide internal tracking key from reported_data
+	}
+
+	return &v1.Sensor{
+		Metadata: &v1.ObjectMeta{
+			Id:          state.Info.ID,
+			Namespace:   state.Info.Namespace,
+			Name:        state.Info.Name,
+			Description: state.Info.Description,
+			Labels:      labels,
+		},
+		Spec: &v1.SensorSpec{
+			GracefulPeriodSeconds: state.Info.GracefulPeriod,
+			FailurePeriodSeconds:  state.Info.FailurePeriod,
+		},
+		Status: &v1.SensorStatus{
+			State:                computedState,
+			Message:              msg,
+			LastOkTimestamp:      state.LastOkTimestamp,
+			LastUpdatedTimestamp: state.LastUpdated,
+			ReportedData:         state.Metadata,
+		},
+	}
 }
 
 func calculateSensorStatus(state *storage.SensorState) string {
@@ -187,16 +197,4 @@ func calculateSensorStatus(state *storage.SensorState) string {
 	}
 
 	return "DEAD"
-}
-
-func convertLabels(labels []*v1.Label) map[string]string {
-	if labels == nil {
-		return make(map[string]string)
-	}
-
-	result := make(map[string]string)
-	for _, label := range labels {
-		result[label.Key] = label.Value
-	}
-	return result
 }

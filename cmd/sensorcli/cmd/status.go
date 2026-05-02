@@ -68,11 +68,11 @@ func runStatus(cmd *cobra.Command, _ []string, sensorID, sensorName, namespace s
 	}
 
 	fmt.Printf("\n--- Sensor Details ---\n")
-	fmt.Printf("ID:             %s\n", s.Id)
-	fmt.Printf("Name:           %s\n", s.Spec.Name)
-	fmt.Printf("Namespace:      %s\n", s.Spec.Namespace)
-	if s.Spec.Description != "" {
-		fmt.Printf("Description:    %s\n", s.Spec.Description)
+	fmt.Printf("ID:             %s\n", s.Metadata.Id)
+	fmt.Printf("Name:           %s\n", s.Metadata.Name)
+	fmt.Printf("Namespace:      %s\n", s.Metadata.Namespace)
+	if s.Metadata.Description != "" {
+		fmt.Printf("Description:    %s\n", s.Metadata.Description)
 	}
 
 	fmt.Printf("\n--- Status ---\n")
@@ -82,10 +82,10 @@ func runStatus(cmd *cobra.Command, _ []string, sensorID, sensorName, namespace s
 	fmt.Printf("Grace Period:   %d seconds\n", s.Spec.GracefulPeriodSeconds)
 	fmt.Printf("Failure Period: %d seconds\n", s.Spec.FailurePeriodSeconds)
 
-	if len(s.Spec.Labels) > 0 {
+	if len(s.Metadata.Labels) > 0 {
 		fmt.Printf("\n--- Labels ---\n")
-		for _, l := range s.Spec.Labels {
-			fmt.Printf("  %s: %s\n", l.Key, l.Value)
+		for k, v := range s.Metadata.Labels {
+			fmt.Printf("  %s: %s\n", k, v)
 		}
 	}
 

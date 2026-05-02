@@ -111,13 +111,13 @@ func printQueryResult(count int, sensors []*v1.Sensor) {
 		}
 
 		// Create a nice human-readable name string: namespace/name
-		displayName := s.Spec.Name
-		if s.Spec.Namespace != "" && s.Spec.Namespace != "default" {
-			displayName = s.Spec.Namespace + "/" + s.Spec.Name
+		displayName := s.Metadata.Name
+		if s.Metadata.Namespace != "" && s.Metadata.Namespace != "default" {
+			displayName = s.Metadata.Namespace + "/" + s.Metadata.Name
 		}
 
 		// Truncate UUID for cleaner table view (first 8 chars)
-		shortID := s.Id
+		shortID := s.Metadata.Id
 		if len(shortID) > 8 {
 			shortID = shortID[:8]
 		}

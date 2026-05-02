@@ -59,16 +59,20 @@ func runRegister(cmd *cobra.Command, _ []string, sensorID, namespace, sensorName
 	}
 	defer conn.Close()
 
-	// Use the new Spec property and SensorSpec type
+	// Use the new KRM structure (Sensor -> Metadata + Spec)
 	req := &v1.RegisterSensorRequest{
-		Spec: &v1.SensorSpec{
-			Id:                    sensorID,
-			Namespace:             namespace,
-			Name:                  sensorName,
-			Description:           description,
-			GracefulPeriodSeconds: gracefulSeconds,
-			FailurePeriodSeconds:  failureSeconds,
-			Labels:                parsedLabels,
+		Sensor: &v1.Sensor{
+			Metadata: &v1.ObjectMeta{
+				Id:          sensorID,
+				Namespace:   namespace,
+				Name:        sensorName,
+				Description: description,
+				Labels:      parsedLabels,
+			},
+			Spec: &v1.SensorSpec{
+				GracefulPeriodSeconds: gracefulSeconds,
+				FailurePeriodSeconds:  failureSeconds,
+			},
 		},
 	}
 
@@ -77,11 +81,8 @@ func runRegister(cmd *cobra.Command, _ []string, sensorID, namespace, sensorName
 		return fmt.Errorf("failed to register sensor: %w", err)
 	}
 
-	if response.Success {
-		fmt.Printf("Sensor registered successfully. ID: %s\n", response.Id)
-	} else {
-		fmt.Printf("Sensor already registered or registration failed. ID: %s\n", response.Id)
-	}
+	// In gRPC, returning an object implies success (errors are thrown via err != nil)
+	fmt.Printf("Sensor registered successfully. ID: %s\n", response.Sensor.Metadata.Id)
 
 	return nil
 }
