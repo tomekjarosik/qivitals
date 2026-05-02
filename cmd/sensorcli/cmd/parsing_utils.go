@@ -10,7 +10,7 @@ import (
 func parseLabels(labelStrings []string) ([]*v1.Label, error) {
 	var parsedLabels []*v1.Label // Initializes as a nil slice
 	for _, label := range labelStrings {
-		parts := strings.SplitN(label, ":", 2)
+		parts := strings.SplitN(label, "=", 2)
 		if len(parts) != 2 {
 			return nil, fmt.Errorf("invalid label format: %s", label)
 		}

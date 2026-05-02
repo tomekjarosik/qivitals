@@ -2,11 +2,14 @@ package e2e
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"net"
 	"os/exec"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -46,4 +49,75 @@ func runCLI(t *testing.T, args ...string) (stdout string, stderr string, err err
 
 	err = cmd.Run()
 	return outBuf.String(), errBuf.String(), err
+}
+
+// --- Human-Readable CLI Helpers ---
+
+func Register(t *testing.T, namespace, name, desc string, graceful, failure int64, labels ...string) string {
+	args := []string{
+		"register",
+		"--namespace", namespace,
+		"--name", name,
+		"--desc", desc,
+		"--graceful", fmt.Sprint(graceful),
+		"--failure", fmt.Sprint(failure),
+	}
+	for _, l := range labels {
+		args = append(args, "--label", l)
+	}
+
+	out, stderr, err := runCLI(t, args...)
+	require.NoError(t, err, "Failed to register %s/%s. Err: %s", namespace, name, stderr)
+	require.Contains(t, out, "Sensor registered successfully")
+
+	// Query it immediately to get the generated ID
+	resp := Query(t, "--namespace", namespace, "--name", "name")
+	return resp.Sensors[0].Spec.Id
+}
+
+func Report(t *testing.T, id string, data ...string) {
+	args := []string{"report", "--id", id}
+	for _, d := range data {
+		args = append(args, "--data", d)
+	}
+	_, stderr, err := runCLI(t, args...)
+	require.NoError(t, err, "Failed to report data for %s. Err: %s", id, stderr)
+}
+
+func Query(t *testing.T, args ...string) E2EQueryResponse {
+	queryArgs := append([]string{"query", "-m"}, args...)
+	out, stderr, err := runCLI(t, queryArgs...)
+	require.NoError(t, err, "Query failed. Err: %s", stderr)
+
+	var response E2EQueryResponse
+	err = json.Unmarshal([]byte(out), &response)
+	require.NoError(t, err, "Failed to parse JSON output")
+	return response
+}
+
+func RequireState(t *testing.T, id, expectedState string) {
+	resp := Query(t) // Query all
+	for _, s := range resp.Sensors {
+		if s.Spec.Id == id {
+			assert.Equal(t, expectedState, s.Status.State, "Sensor state mismatch")
+			return
+		}
+	}
+	t.Fatalf("Sensor %s not found during state check", id)
+}
+
+// --- Domain Models for JSON Parsing ---
+type E2ESensor struct {
+	Spec struct {
+		Id   string `json:"id"`
+		Name string `json:"name"`
+	} `json:"spec"`
+	Status struct {
+		State        string            `json:"state"`
+		ReportedData map[string]string `json:"reportedData"`
+	} `json:"status"`
+}
+
+type E2EQueryResponse struct {
+	Sensors []E2ESensor `json:"sensors"`
 }

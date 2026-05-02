@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -36,7 +37,8 @@ func (s *StatusMonitorService) RegisterSensor(ctx context.Context, req *v1.Regis
 
 	// Pass context to the new storage interface
 	if err := s.storage.Register(ctx, sensor); err != nil {
-		if _, ok := err.(*storage.DuplicateSensorError); ok {
+		var duplicateSensorError *storage.DuplicateSensorError
+		if errors.As(err, &duplicateSensorError) {
 			timestamp := time.Now().Unix()
 			return &v1.RegisterSensorResponse{
 				Id:        sensor.ID,
@@ -58,7 +60,8 @@ func (s *StatusMonitorService) RegisterSensor(ctx context.Context, req *v1.Regis
 func (s *StatusMonitorService) ReportSensor(ctx context.Context, req *v1.ReportSensorRequest) (*v1.ReportSensorResponse, error) {
 	// Pass context to the new storage interface
 	if err := s.storage.SendData(ctx, req.Id, true, req.Data); err != nil {
-		if _, ok := err.(*storage.SensorNotFoundError); ok {
+		var sensorNotFoundError *storage.SensorNotFoundError
+		if errors.As(err, &sensorNotFoundError) {
 			timestamp := time.Now().Unix()
 			return &v1.ReportSensorResponse{
 				Id:        req.Id,
@@ -78,20 +81,20 @@ func (s *StatusMonitorService) ReportSensor(ctx context.Context, req *v1.ReportS
 }
 
 func (s *StatusMonitorService) QuerySensors(ctx context.Context, req *v1.QuerySensorsRequest) (*v1.QuerySensorsResponse, error) {
-	// 1. Build the filter using the new storage.QueryFilter structure
+	// Build the filter using the new storage.QueryFilter structure
 	filter := storage.QueryFilter{
 		Namespace: req.Namespace,
 		ID:        req.Id,
 		Labels:    convertLabels(req.Labels),
 	}
 
-	// 2. Fetch all matching full states in ONE call (solves the N+1 problem!)
+	// Fetch all matching full states in ONE call
 	states, err := s.storage.Query(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
 
-	// 3. Map the storage models to the protobuf response models
+	// Map the storage models to the protobuf response models
 	sensors := make([]*v1.Sensor, 0, len(states))
 	for _, state := range states {
 		computedState := calculateSensorStatus(state)
@@ -111,9 +114,9 @@ func (s *StatusMonitorService) QuerySensors(ctx context.Context, req *v1.QuerySe
 
 		// Build the Spec part
 		spec := &v1.SensorSpec{
-			Id: state.Info.ID,
-			// Note: If you added Namespace to storage.SensorInfo, use state.Info.Namespace here
+			Id:                    state.Info.ID,
 			Name:                  state.Info.Name,
+			Namespace:             state.Info.Namespace,
 			Description:           state.Info.Description,
 			GracefulPeriodSeconds: state.Info.GracefulPeriod,
 			FailurePeriodSeconds:  state.Info.FailurePeriod,

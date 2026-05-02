@@ -9,7 +9,8 @@ import (
 )
 
 func NewCmdQuery() *cobra.Command {
-	var path string
+	var id string
+	var name string
 	var namespace string
 	var status string
 	var labels []string
@@ -20,16 +21,18 @@ func NewCmdQuery() *cobra.Command {
 		Long: `Find sensors matching the given criteria.
 
 Examples:
-  sensorcli query --path "backup*"
+  sensorcli query --namespace home
+  sensorcli query --name "water-bill"
   sensorcli query --status ACTIVE
-  sensorcli query --label "env:production" --label "region:us-east"
-  sensorcli query --path "temp*" --status DEAD`,
+  sensorcli query --label "env=production" --label "region=us-east"
+  sensorcli query --id 550e8400-e29b-41d4-a716-446655440000`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runQuery(cmd, args, path, namespace, status, labels)
+			return runQuery(cmd, args, id, name, namespace, status, labels)
 		},
 	}
 
-	cmd.Flags().StringVar(&path, "path", "", "Filter by path prefix (supports * wildcard)")
+	cmd.Flags().StringVar(&id, "id", "", "Filter by specific sensor UUID")
+	cmd.Flags().StringVar(&name, "name", "", "Filter by exact sensor name")
 	cmd.Flags().StringVar(&namespace, "namespace", "", "Filter by namespace")
 	cmd.Flags().StringVar(&status, "status", "", "Filter by status: ACTIVE, DEGRADED, or DEAD")
 	cmd.Flags().StringArrayVar(&labels, "label", []string{}, "Filter by label key:value pairs (can be repeated)")
@@ -37,7 +40,7 @@ Examples:
 	return cmd
 }
 
-func runQuery(cmd *cobra.Command, _ []string, path, namespace, status string, labelStrings []string) error {
+func runQuery(cmd *cobra.Command, _ []string, id, name, namespace, status string, labelStrings []string) error {
 	client, conn, err := NewStatusClient(cmd.Context())
 	if err != nil {
 		return fmt.Errorf("failed to connect to gRPC server: %w", err)
@@ -49,9 +52,10 @@ func runQuery(cmd *cobra.Command, _ []string, path, namespace, status string, la
 		return fmt.Errorf("failed to parse labels: %w", err)
 	}
 
-	// Unlike HTTP, we don't need to worry about query parameter concatenation;
-	// we simply populate the structured request object.
+	// Map CLI arguments to the exact fields available in our Proto schema
 	req := &v1.QuerySensorsRequest{
+		Id:        id,
+		Name:      name,
 		Namespace: namespace,
 		Status:    status,
 		Labels:    parsedLabels,

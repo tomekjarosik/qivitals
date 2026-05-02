@@ -38,7 +38,8 @@ Sensorcli will communicate over gRPC - it must have basic functionality to read,
 
 # TODOs
 
-[ ] - add public key to SensorInfo
+[ ] - add public key to SensorInfo or hash of a password/token for WebUI
 [ ] - add sensor data evaluation function to SensorInfo - could be few predefined at first
 [ ] - add web UI to display statuses with URL query param to filter them
 [ ] - add functionality to make status "reviewed" / "casual"
+[ ] - 

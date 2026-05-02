@@ -13,12 +13,12 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
+	"github.com/tomekjarosik/one-status/internal/middleware"
+	"github.com/tomekjarosik/one-status/internal/server"
+	"github.com/tomekjarosik/one-status/internal/storage"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/grpclog"
-
-	"github.com/tomekjarosik/one-status/internal/server"
-	"github.com/tomekjarosik/one-status/internal/storage"
 )
 
 func NewCmdServe() *cobra.Command {
@@ -32,9 +32,11 @@ func NewCmdServe() *cobra.Command {
 	// Add flags and bind to viper
 	cmd.Flags().String("grpc-port", "localhost:50051", "Address and port for gRPC server to listen on")
 	cmd.Flags().String("http-port", "localhost:8088", "Address and port for HTTP gateway to listen on")
+	cmd.Flags().String("log-file", "server.log", "Path to log file")
 
 	viper.BindPFlag("grpc_port", cmd.Flags().Lookup("grpc-port"))
 	viper.BindPFlag("http_port", cmd.Flags().Lookup("http-port"))
+	viper.BindPFlag("log_file", cmd.Flags().Lookup("log-file"))
 
 	return cmd
 }
@@ -45,6 +47,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 
 	grpcPort := viper.GetString("grpc_port")
 	httpPort := viper.GetString("http_port")
+	logFile := viper.GetString("log_file")
 
 	ctx, cancel := context.WithCancel(cmd.Context())
 	defer cancel()
@@ -52,8 +55,14 @@ func runServe(cmd *cobra.Command, args []string) error {
 	storageSvc := storage.NewMemorySensorStorage()
 	statussvc := server.NewStatusMonitorService(storageSvc)
 
-	grpcServer := grpc.NewServer()
+	opts := []grpc.ServerOption{}
+	if logFile != "" {
+		opts = append(opts, grpc.UnaryInterceptor(middleware.LoggingInterceptor(logFile)))
+	}
+
+	grpcServer := grpc.NewServer(opts...)
 	v1.RegisterStatusServiceServer(grpcServer, statussvc)
+
 
 	// Start gRPC server in a goroutine
 	go func() {

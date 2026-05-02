@@ -27,8 +27,8 @@ Sensors are uniquely identified by humans using a combination of their Namespace
 If you do not provide an explicit --id, the server will automatically generate a UUID for you.
 
 Examples:
-  sensorcli register --namespace db --name "Daily Backup" --label "env:production" --graceful 300 --failure 600
-  sensorcli register -ns frontend -n "Payment-Service" -l "tier:1"`,
+  sensorcli register --namespace db --name "Daily Backup" --label "env=production" --graceful 300 --failure 600
+  sensorcli register -ns frontend -n "Payment-Service" -l "tier=1"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runRegister(cmd, args, sensorID, namespace, sensorName, description, gracefulSeconds, failureSeconds, labels)
 		},

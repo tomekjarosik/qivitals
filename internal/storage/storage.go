@@ -17,6 +17,7 @@ const (
 type SensorInfo struct {
 	ID             string
 	Name           string
+	Namespace      string
 	Description    string
 	GracefulPeriod int64
 	FailurePeriod  int64
