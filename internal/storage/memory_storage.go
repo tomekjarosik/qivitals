@@ -33,7 +33,7 @@ func (m *MemorySensorStorage) Register(ctx context.Context, sensor *SensorInfo) 
 	// Enforce unique (Namespace, Name) constraint
 	for _, existing := range m.sensors {
 		// Note: Assuming you add Namespace to SensorInfo. If not, just check Name.
-		if existing.Info.Name == sensor.Name {
+		if existing.Info.Name == sensor.Name && existing.Info.Namespace == sensor.Namespace {
 			return &DuplicateSensorError{SensorID: sensor.Name + " (name already in use)"}
 		}
 	}
@@ -77,15 +77,17 @@ func (m *MemorySensorStorage) Update(ctx context.Context, sensorID string, updat
 
 	for _, field := range updateMask {
 		switch field {
-		case "name":
+		case "metadata.name":
 			state.Info.Name = updates.Name
-		case "description":
+		case "metadata.namespace":
+			state.Info.Namespace = updates.Namespace
+		case "metadata.description":
 			state.Info.Description = updates.Description
-		case "graceful_period_seconds": // matching proto field name convention
+		case "spec.graceful_period_seconds": // matching proto field name convention
 			state.Info.GracefulPeriod = updates.GracefulPeriod
-		case "failure_period_seconds":
+		case "spec.failure_period_seconds":
 			state.Info.FailurePeriod = updates.FailurePeriod
-		case "labels":
+		case "metadata.labels":
 			labels := make(map[string]string)
 			for k, v := range updates.Labels {
 				labels[k] = v

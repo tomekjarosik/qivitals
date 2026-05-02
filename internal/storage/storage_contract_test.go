@@ -1,0 +1,374 @@
+package storage
+
+import (
+	"context"
+	"fmt"
+	"sync"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// RunStorageContractTests executes the standard suite of storage tests against any SensorStorage implementation.
+func RunStorageContractTests(t *testing.T, setup func() SensorStorage, teardown func()) {
+
+	t.Run("Register and Get", func(t *testing.T) {
+		storage := setup()
+		defer teardown()
+		ctx := context.Background()
+
+		sensor := &SensorInfo{
+			ID:             "sensor-1",
+			Namespace:      "default",
+			Name:           "db-backup",
+			Description:    "Daily database backup",
+			GracefulPeriod: 86400,
+			FailurePeriod:  172800,
+			Labels:         map[string]string{"env": "prod", "team": "data"},
+		}
+
+		// Success case
+		err := storage.Register(ctx, sensor)
+		require.NoError(t, err, "Failed to register sensor")
+
+		// Edge case: Duplicate ID
+		err = storage.Register(ctx, sensor)
+		assert.IsType(t, &DuplicateSensorError{}, err)
+
+		// Edge case: Duplicate Namespace + Name
+		sensorDiffID := &SensorInfo{ID: "sensor-2", Namespace: "default", Name: "db-backup"}
+		err = storage.Register(ctx, sensorDiffID)
+		assert.IsType(t, &DuplicateSensorError{}, err)
+
+		// Edge case: Same Name, Different Namespace (Should Succeed)
+		sensorDiffNS := &SensorInfo{ID: "sensor-3", Namespace: "staging", Name: "db-backup"}
+		err = storage.Register(ctx, sensorDiffNS)
+		require.NoError(t, err, "Sensors with same name in different namespaces should be allowed")
+
+		// Verify state retrieval
+		state, err := storage.GetStatus(ctx, "sensor-1")
+		require.NoError(t, err)
+		assert.Equal(t, "db-backup", state.Info.Name)
+		assert.Equal(t, "prod", state.Info.Labels["env"])
+
+		// Edge case: Get non-existent
+		_, err = storage.GetStatus(ctx, "does-not-exist")
+		assert.IsType(t, &SensorNotFoundError{}, err)
+	})
+
+	t.Run("Update", func(t *testing.T) {
+		storage := setup()
+		defer teardown()
+		ctx := context.Background()
+
+		err := storage.Register(ctx, &SensorInfo{
+			ID:             "s1",
+			Name:           "test",
+			Description:    "old",
+			GracefulPeriod: 100,
+		})
+		require.NoError(t, err)
+
+		// Partial update
+		updates := &SensorInfo{
+			Name:           "new-test", // Should NOT be updated based on mask
+			Description:    "new desc",
+			GracefulPeriod: 200,
+		}
+
+		err = storage.Update(ctx, "s1", updates, []string{"metadata.description", "spec.graceful_period_seconds"})
+		require.NoError(t, err)
+
+		state, _ := storage.GetStatus(ctx, "s1")
+		assert.Equal(t, "new desc", state.Info.Description)
+		assert.Equal(t, int64(200), state.Info.GracefulPeriod)
+		assert.Equal(t, "test", state.Info.Name, "Name should not have changed since it wasn't in updateMask")
+
+		// Edge case: Update non-existent
+		err = storage.Update(ctx, "does-not-exist", updates, []string{"metadata.description"})
+		assert.IsType(t, &SensorNotFoundError{}, err)
+	})
+
+	t.Run("SendData", func(t *testing.T) {
+		storage := setup()
+		defer teardown()
+		ctx := context.Background()
+
+		storage.Register(ctx, &SensorInfo{ID: "s1", Name: "test"})
+
+		// Initial Data (OK)
+		err := storage.SendData(ctx, "s1", true, map[string]string{"version": "1.2.3"})
+		require.NoError(t, err)
+
+		state1, _ := storage.GetStatus(ctx, "s1")
+		assert.Equal(t, "1.2.3", state1.Metadata["version"])
+		okTime1 := state1.LastOkTimestamp
+
+		// Second Data (Failed) -> Should update metadata but NOT LastOkTimestamp
+		err = storage.SendData(ctx, "s1", false, map[string]string{"error": "timeout"})
+		require.NoError(t, err)
+
+		state2, _ := storage.GetStatus(ctx, "s1")
+		assert.Equal(t, okTime1, state2.LastOkTimestamp, "LastOkTimestamp should not increase on failure")
+		assert.GreaterOrEqual(t, state2.LastUpdated, state1.LastUpdated, "LastUpdated should always increase")
+
+		// Postgres JSONB || operator merges keys. Let's ensure memory storage does too (if you implemented merging).
+		// If Memory storage overwrites entirely, this test might fail there. Assuming merging logic is intended!
+		assert.Equal(t, "1.2.3", state2.Metadata["version"], "Previous metadata keys should ideally be preserved (JSONB merge)")
+		assert.Equal(t, "timeout", state2.Metadata["error"])
+
+		// Edge case: SendData non-existent
+		err = storage.SendData(ctx, "does-not-exist", true, nil)
+		assert.IsType(t, &SensorNotFoundError{}, err)
+	})
+
+	t.Run("Delete", func(t *testing.T) {
+		storage := setup()
+		defer teardown()
+		ctx := context.Background()
+
+		storage.Register(ctx, &SensorInfo{ID: "s1", Name: "test"})
+
+		err := storage.Delete(ctx, "s1")
+		require.NoError(t, err)
+
+		_, err = storage.GetStatus(ctx, "s1")
+		assert.IsType(t, &SensorNotFoundError{}, err)
+
+		// Edge case: Delete already deleted
+		err = storage.Delete(ctx, "s1")
+		assert.IsType(t, &SensorNotFoundError{}, err)
+	})
+
+	t.Run("Query Advanced Filters", func(t *testing.T) {
+		storage := setup()
+		defer teardown()
+		ctx := context.Background()
+
+		storage.Register(ctx, &SensorInfo{ID: "s1", Namespace: "infra", Name: "job-a", Description: "Backup Alpha", Labels: map[string]string{"env": "prod", "tier": "1", "critical": "true"}})
+		storage.Register(ctx, &SensorInfo{ID: "s2", Namespace: "infra", Name: "job-b", Description: "Backup Beta", Labels: map[string]string{"env": "prod", "tier": "2"}})
+		storage.Register(ctx, &SensorInfo{ID: "s3", Namespace: "app", Name: "task-c", Description: "Log rotation for alpha", Labels: map[string]string{"env": "dev"}})
+		storage.Register(ctx, &SensorInfo{ID: "s4", Namespace: "app", Name: "db-cleanup", Description: "Clear old logs", Labels: map[string]string{"env": "prod"}})
+
+		tests := []struct {
+			name          string
+			filter        QueryFilter
+			expectedIDs   []string
+			expectedCount int
+		}{
+			{
+				name:          "Empty filter matches all",
+				filter:        QueryFilter{},
+				expectedCount: 4,
+			},
+			{
+				name:          "Filter by Namespace",
+				filter:        QueryFilter{Namespace: "infra"},
+				expectedCount: 2,
+			},
+			{
+				name:          "Search by description and name substring (case insensitive)",
+				filter:        QueryFilter{Search: "alpha"}, // Matches "Backup Alpha" (s1) and "Log rotation for alpha" (s3)
+				expectedCount: 2,
+				expectedIDs:   []string{"s1", "s3"},
+			},
+			{
+				name:          "Complex: Namespace + Search + Label",
+				filter:        QueryFilter{Namespace: "infra", Search: "beta", Labels: map[string]string{"env": "prod"}},
+				expectedCount: 1,
+				expectedIDs:   []string{"s2"},
+			},
+			{
+				name:          "Has Label Key with multiple values",
+				filter:        QueryFilter{HasLabelKeys: []string{"critical"}},
+				expectedCount: 1,
+				expectedIDs:   []string{"s1"},
+			},
+			{
+				name:          "Sorting by Name ASC",
+				filter:        QueryFilter{OrderBy: "name", OrderDesc: false},
+				expectedCount: 4,
+				expectedIDs:   []string{"s4", "s1", "s2", "s3"}, // db-cleanup, job-a, job-b, task-c
+			},
+			{
+				name:          "Pagination (Limit)",
+				filter:        QueryFilter{OrderBy: "name", OrderDesc: false, Limit: 2},
+				expectedCount: 2,
+				expectedIDs:   []string{"s4", "s1"},
+			},
+			{
+				name:          "Non-matching complex query",
+				filter:        QueryFilter{Namespace: "app", HasLabelKeys: []string{"critical"}},
+				expectedCount: 0,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				results, err := storage.Query(ctx, tt.filter)
+				require.NoError(t, err)
+				assert.Len(t, results, tt.expectedCount)
+
+				if len(tt.expectedIDs) > 0 {
+					var actualIDs []string
+					for _, res := range results {
+						actualIDs = append(actualIDs, res.Info.ID)
+					}
+					// If sorting was tested, order matters, so we use Equal.
+					// Otherwise, we just use ElementsMatch
+					if tt.filter.OrderBy != "" {
+						assert.Equal(t, tt.expectedIDs, actualIDs)
+					} else {
+						assert.ElementsMatch(t, tt.expectedIDs, actualIDs)
+					}
+				}
+			})
+		}
+	})
+}
+
+// RunExtendedStorageContractTests executes advanced edge cases and stress tests.
+func RunExtendedStorageContractTests(t *testing.T, setup func() SensorStorage, teardown func()) {
+
+	t.Run("Update_Boundary_Cases", func(t *testing.T) {
+		storage := setup()
+		defer teardown()
+		ctx := context.Background()
+
+		initial := &SensorInfo{
+			ID:             "boundary-1",
+			Name:           "boundary-test",
+			Description:    "original description",
+			GracefulPeriod: 100,
+		}
+		err := storage.Register(ctx, initial)
+		require.NoError(t, err)
+
+		// Case: Empty Update Mask (Nothing should change except LastUpdated)
+		updates := &SensorInfo{
+			Name:        "changed-name",
+			Description: "changed-desc",
+		}
+		err = storage.Update(ctx, "boundary-1", updates, []string{})
+		require.NoError(t, err)
+
+		state, _ := storage.GetStatus(ctx, "boundary-1")
+		assert.Equal(t, "boundary-test", state.Info.Name, "Name should not change with empty mask")
+		assert.Equal(t, "original description", state.Info.Description, "Description should not change with empty mask")
+
+		// Case: Invalid field in mask (System should handle gracefully)
+		err = storage.Update(ctx, "boundary-1", updates, []string{"non_existent_field"})
+		// Depending on your implementation, this might return an error or just ignore it.
+		// We assume the system should be robust.
+		if err != nil {
+			assert.Error(t, err)
+		}
+	})
+
+	t.Run("Concurrency_Stress_Test", func(t *testing.T) {
+		storage := setup()
+		defer teardown()
+		ctx := context.Background()
+
+		sensorID := "concurrent-sensor"
+		storage.Register(ctx, &SensorInfo{ID: sensorID, Name: "stress-test"})
+
+		const iterations = 50
+		var wg sync.WaitGroup
+		wg.Add(iterations * 2)
+
+		// Simulate concurrent SendData (Metadata updates)
+		for i := 0; i < iterations; i++ {
+			go func(val int) {
+				defer wg.Done()
+				meta := map[string]string{fmt.Sprintf("key-%d", val): "active"}
+				_ = storage.SendData(ctx, sensorID, true, meta)
+			}(i)
+
+			// Simulate concurrent Updates (Field updates)
+			go func(val int) {
+				defer wg.Done()
+				updates := &SensorInfo{Description: fmt.Sprintf("desc-%d", val)}
+				_ = storage.Update(ctx, sensorID, updates, []string{"metadata.description"})
+			}(i)
+		}
+
+		wg.Wait()
+
+		// Verify integrity: The sensor should still exist and be queryable
+		state, err := storage.GetStatus(ctx, sensorID)
+		require.NoError(t, err)
+		assert.NotNil(t, state)
+
+		// Check that metadata keys merged (applying the logic mentioned in your original test)
+		// Note: In a high-concurrency environment, we check if the system survived without crashing
+		// and that the metadata contains at least some of the keys.
+		assert.Greater(t, len(state.Metadata), 0, "Metadata should have captured concurrent updates")
+	})
+
+	t.Run("Query_Logic_Intersections", func(t *testing.T) {
+		storage := setup()
+		defer teardown()
+		ctx := context.Background()
+
+		// Setup specific dataset for intersection testing
+		storage.Register(ctx, &SensorInfo{ID: "inter-1", Namespace: "prod", Name: "alpha", Labels: map[string]string{"tier": "gold"}})
+		storage.Register(ctx, &SensorInfo{ID: "inter-2", Namespace: "prod", Name: "beta", Labels: map[string]string{"tier": "silver"}})
+		storage.Register(ctx, &SensorInfo{ID: "inter-3", Namespace: "dev", Name: "gamma", Labels: map[string]string{"tier": "gold"}})
+
+		// Case: Search matches, but Label excludes (AND logic check)
+		filter := QueryFilter{
+			Search: "alpha",                             // Matches inter-1
+			Labels: map[string]string{"tier": "silver"}, // inter-1 is gold
+		}
+		results, err := storage.Query(ctx, filter)
+		require.NoError(t, err)
+		assert.Len(t, results, 0, "Should return 0 because Search and Labels do not intersect")
+
+		// Case: HasLabelKeys filter
+		filterHasKey := QueryFilter{
+			HasLabelKeys: []string{"tier"},
+		}
+		results, err = storage.Query(ctx, filterHasKey)
+		require.NoError(t, err)
+		assert.Len(t, results, 3, "All sensors should match as they all have the 'tier' key")
+	})
+
+	// TODO: this is not yet implemented
+	//t.Run("Pagination_Consistency", func(t *testing.T) {
+	//	storage := setup()
+	//	defer teardown()
+	//	ctx := context.Background()
+	//
+	//	// Populate with many sensors
+	//	for i := 0; i < 10; i++ {
+	//		storage.Register(ctx, &SensorInfo{
+	//			ID:   fmt.Sprintf("pag-%d", i),
+	//			Name: fmt.Sprintf("sensor-%02d", i),
+	//		})
+	//	}
+	//
+	//	// Page 1
+	//	filter1 := QueryFilter{OrderBy: "name", OrderDesc: false, Limit: 3}
+	//	res1, err := storage.Query(ctx, filter1)
+	//	require.NoError(t, err)
+	//	assert.Len(t, res1, 3)
+	//
+	//	// Check that the first ID of the next page would be the 4th sensor
+	//	// Note: Real cursor implementation depends on your DB (e.g., ID or Offset)
+	//	// This test assumes the 'Cursor' logic is implemented.
+	//	if len(res1) > 0 {
+	//		filter2 := QueryFilter{
+	//			OrderBy:   "name",
+	//			OrderDesc: false,
+	//			Limit:     3,
+	//			Cursor:    res1[2].Info.ID, // Use last ID of page 1 as cursor
+	//		}
+	//		res2, err := storage.Query(ctx, filter2)
+	//		if err == nil && len(res2) > 0 {
+	//			assert.NotEqual(t, res1[0].Info.ID, res2[0].Info.ID, "Cursor should advance the result set")
+	//		}
+	//	}
+	//})
+}

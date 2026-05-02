@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 	v1 "github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
 	"github.com/tomekjarosik/one-status/internal/storage"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type StatusMonitorService struct {
@@ -61,7 +63,7 @@ func (s *StatusMonitorService) ReportSensor(ctx context.Context, req *v1.ReportS
 	if targetID == "" && req.Namespace != "" && req.Name != "" {
 		res, err := s.storage.Query(ctx, storage.QueryFilter{Namespace: req.Namespace, Name: req.Name, Limit: 1})
 		if err != nil || len(res) == 0 {
-			return nil, errors.New("sensor not found")
+			return nil, status.Errorf(codes.NotFound, "sensor not found")
 		}
 		targetID = res[0].Info.ID
 	}
@@ -75,15 +77,7 @@ func (s *StatusMonitorService) ReportSensor(ctx context.Context, req *v1.ReportS
 	if err != nil {
 		return nil, err
 	}
-
-	// If the user provided a message, we can store it in the metadata map for now
-	if req.Message != "" {
-		if state.Metadata == nil {
-			state.Metadata = make(map[string]string)
-		}
-		state.Metadata["_message"] = req.Message
-	}
-
+	// TODO: handle req.message
 	return &v1.ReportSensorResponse{
 		Sensor: buildProtoSensor(state),
 	}, nil
