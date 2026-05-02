@@ -73,7 +73,7 @@ func Register(t *testing.T, namespace, name, desc string, graceful, failure int6
 	// Query it immediately to get the generated ID
 	resp := Query(t, "--namespace", namespace, "--name", name)
 	require.Len(t, resp.Sensors, 1)
-	return resp.Sensors[0].Spec.Id
+	return resp.Sensors[0].Metadata.Id
 }
 
 func Report(t *testing.T, id string, data ...string) {
@@ -99,7 +99,7 @@ func Query(t *testing.T, args ...string) E2EQueryResponse {
 func RequireState(t *testing.T, id, expectedState string) {
 	resp := Query(t) // Query all
 	for _, s := range resp.Sensors {
-		if s.Spec.Id == id {
+		if s.Metadata.Id == id {
 			assert.Equal(t, expectedState, s.Status.State, "Sensor state mismatch")
 			return
 		}
@@ -115,9 +115,13 @@ func Delete(t *testing.T, id string) {
 
 // --- Domain Models for JSON Parsing ---
 type E2ESensor struct {
+	Metadata struct { // <--- Added Metadata block!
+		Id        string `json:"id"`
+		Name      string `json:"name"`
+		Namespace string `json:"namespace"`
+	} `json:"metadata"`
 	Spec struct {
-		Id   string `json:"id"`
-		Name string `json:"name"`
+		GracefulPeriod int64 `json:"gracefulPeriodSeconds,string"`
 	} `json:"spec"`
 	Status struct {
 		State        string            `json:"state"`

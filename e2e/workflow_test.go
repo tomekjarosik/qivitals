@@ -124,7 +124,7 @@ func TestWorkflow_AdvancedQueryFiltering(t *testing.T) {
 	getNames := func(resp E2EQueryResponse) []string {
 		var names []string
 		for _, s := range resp.Sensors {
-			names = append(names, s.Spec.Name)
+			names = append(names, s.Metadata.Name)
 		}
 		return names
 	}
@@ -153,7 +153,7 @@ func TestWorkflow_AdvancedQueryFiltering(t *testing.T) {
 	// Find prod sensors owned by backend team
 	resProdBackend := Query(t, "--label", "env=prod", "--label", "team=backend")
 	assert.Len(t, resProdBackend.Sensors, 1)
-	assert.Equal(t, "api-health", resProdBackend.Sensors[0].Spec.Name)
+	assert.Equal(t, "api-health", resProdBackend.Sensors[0].Metadata.Name)
 
 	// Case E: Has-Label (Key existence only)
 	// Find any sensor that has the "critical" label, regardless of its value

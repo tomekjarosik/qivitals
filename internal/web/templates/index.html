@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>One Status Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <meta http-equiv="refresh" content="30">
+</head>
+<body class="bg-gray-100 text-gray-900 font-sans antialiased p-8">
+<div class="max-w-6xl mx-auto">
+    <header class="mb-6 flex justify-between items-center">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-800">One Status</h1>
+            <p class="text-sm text-gray-500 mt-1">System Health Overview</p>
+        </div>
+        <div class="text-sm text-gray-500">
+            Last updated: {{ .Now }}
+        </div>
+    </header>
+
+    <!-- Filtering Form -->
+    <form method="GET" action="/" class="mb-6 flex gap-4 bg-white p-4 rounded-lg shadow-sm">
+        <div>
+            <label class="block text-xs font-medium text-gray-700">Namespace</label>
+            <input type="text" name="namespace" value="{{ .CurrentNamespace }}" placeholder="e.g. infra" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 text-sm p-2 border">
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-gray-700">Status</label>
+            <select name="status" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 text-sm p-2 border bg-white">
+                <option value="ALL" {{ if eq .CurrentStatus "ALL" }}selected{{ end }}>All</option>
+                <option value="OK" {{ if eq .CurrentStatus "OK" }}selected{{ end }}>OK</option>
+                <option value="DEGRADED" {{ if eq .CurrentStatus "DEGRADED" }}selected{{ end }}>Degraded</option>
+                <option value="DEAD" {{ if eq .CurrentStatus "DEAD" }}selected{{ end }}>Dead</option>
+            </select>
+        </div>
+        <div class="flex items-end">
+            <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-md text-sm transition-colors">
+                Filter
+            </button>
+            <a href="/" class="ml-2 text-sm text-indigo-600 hover:text-indigo-800 py-2">Clear</a>
+        </div>
+    </form>
+
+    <div class="bg-white shadow-md rounded-lg overflow-hidden">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+            <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sensor</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Labels</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Heartbeat</th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+            </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+            {{ range .Sensors }}
+            <tr class="hover:bg-gray-50 transition-colors">
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <!-- Changed ACTIVE to OK -->
+                    {{ if eq .Status.State "OK" }}
+                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">OK</span>
+                    {{ else if eq .Status.State "DEGRADED" }}
+                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">Degraded</span>
+                    {{ else }}
+                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Dead</span>
+                    {{ end }}
+                </td>
+                <td class="px-6 py-4">
+                    <div class="text-sm font-medium text-gray-900">{{ .Metadata.Name }}</div>
+                    <div class="text-sm text-gray-500">{{ .Metadata.Namespace }}</div>
+                </td>
+                <td class="px-6 py-4 text-sm text-gray-500">
+                    <!-- Display Labels -->
+                    <div class="flex flex-wrap gap-1">
+                        {{ range $k, $v := .Metadata.Labels }}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200">
+                                    {{ $k }}:{{ $v }}
+                                </span>
+                        {{ else }}
+                        <span class="text-gray-400 italic text-xs">No labels</span>
+                        {{ end }}
+                    </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {{ if eq .Status.LastOkTimestamp 0 }}
+                    Never
+                    {{ else }}
+                    <span class="format-timestamp" data-ts="{{ .Status.LastOkTimestamp }}">
+                                    {{ .Status.LastOkTimestamp }}
+                                </span>
+                    {{ end }}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <!-- The Poke Button Form -->
+                    <form method="POST" class="inline">
+                        <input type="hidden" name="poke_id" value="{{ .Metadata.Id }}">
+                        <button type="submit" class="text-indigo-600 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-3 py-1 rounded transition-colors">
+                            Poke
+                        </button>
+                    </form>
+                </td>
+            </tr>
+            {{ else }}
+            <tr>
+                <td colspan="5" class="px-6 py-8 text-center text-gray-500">
+                    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <h3 class="mt-2 text-sm font-medium text-gray-900">No sensors found</h3>
+                    <p class="mt-1 text-sm text-gray-500">Try adjusting your filters or register a new sensor.</p>
+                </td>
+            </tr>
+            {{ end }}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const elements = document.querySelectorAll('.format-timestamp');
+        elements.forEach(el => {
+            const ts = parseInt(el.getAttribute('data-ts'), 10);
+            if (ts > 0) {
+                const date = new Date(ts * 1000);
+                el.textContent = date.toLocaleString(undefined, {
+                    month: 'short', day: 'numeric',
+                    hour: '2-digit', minute: '2-digit', second: '2-digit'
+                });
+            }
+        });
+    });
+</script>
+</body>
+</html>

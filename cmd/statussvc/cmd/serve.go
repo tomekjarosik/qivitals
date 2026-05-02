@@ -16,6 +16,7 @@ import (
 	"github.com/tomekjarosik/one-status/internal/middleware"
 	"github.com/tomekjarosik/one-status/internal/server"
 	"github.com/tomekjarosik/one-status/internal/storage"
+	"github.com/tomekjarosik/one-status/internal/web"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/grpclog"
@@ -31,7 +32,7 @@ func NewCmdServe() *cobra.Command {
 
 	// Add flags and bind to viper
 	cmd.Flags().String("grpc-port", "localhost:50051", "Address and port for gRPC server to listen on")
-	cmd.Flags().String("http-port", "localhost:8088", "Address and port for HTTP gateway to listen on")
+	cmd.Flags().String("http-port", "localhost:8088", "Address and port for HTTP gateway and Web UI to listen on")
 	cmd.Flags().String("log-file", "server.log", "Path to log file")
 
 	viper.BindPFlag("grpc_port", cmd.Flags().Lookup("grpc-port"))
@@ -42,9 +43,6 @@ func NewCmdServe() *cobra.Command {
 }
 
 func runServe(cmd *cobra.Command, args []string) error {
-	// Ensure viper reads from environment variables (like GRPC_PORT)
-	viper.AutomaticEnv()
-
 	grpcPort := viper.GetString("grpc_port")
 	httpPort := viper.GetString("http_port")
 	logFile := viper.GetString("log_file")
@@ -52,9 +50,11 @@ func runServe(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithCancel(cmd.Context())
 	defer cancel()
 
+	// 1. Initialize Storage & Service Layer
 	storageSvc := storage.NewMemorySensorStorage()
 	statussvc := server.NewStatusMonitorService(storageSvc)
 
+	// 2. Initialize gRPC Server
 	opts := []grpc.ServerOption{}
 	if logFile != "" {
 		opts = append(opts, grpc.UnaryInterceptor(middleware.LoggingInterceptor(logFile)))
@@ -63,8 +63,6 @@ func runServe(cmd *cobra.Command, args []string) error {
 	grpcServer := grpc.NewServer(opts...)
 	v1.RegisterStatusServiceServer(grpcServer, statussvc)
 
-
-	// Start gRPC server in a goroutine
 	go func() {
 		l, err := net.Listen("tcp", grpcPort)
 		if err != nil {
@@ -72,56 +70,69 @@ func runServe(cmd *cobra.Command, args []string) error {
 		}
 		grpclog.Infof("gRPC server listening on %s", grpcPort)
 		if err := grpcServer.Serve(l); err != nil && err != grpc.ErrServerStopped {
-			grpclog.Fatalf("failed to serve: %v", err)
+			grpclog.Fatalf("failed to serve gRPC: %v", err)
 		}
 	}()
 
-	// Start HTTP gateway
-	gatewayCtx, gatewayCancel := context.WithCancel(ctx)
-	defer gatewayCancel()
-
-	gateway, err := createGateway(gatewayCtx, grpcPort)
+	// 3. Initialize HTTP Gateway (Translates HTTP/JSON -> gRPC)
+	gateway, err := createGateway(ctx, grpcPort)
 	if err != nil {
 		return err
 	}
 
+	// 4. Initialize Web UI Dashboard
+	dashboardHandler, err := web.NewDashboardHandler(statussvc)
+	if err != nil {
+		return err
+	}
+
+	// 5. Mount HTTP Routes
 	mux := http.NewServeMux()
-	mux.Handle("/api/", gateway)
+	mux.Handle("/api/", gateway) // Matches /api/ and all sub-paths
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Strict check for exactly "/" so it doesn't catch missing /api/ routes
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		dashboardHandler.ServeHTTP(w, r)
+	})
 
 	httpServer := &http.Server{Addr: httpPort, Handler: mux}
 
-	grpclog.Infof("HTTP gateway listening on %s", httpPort)
-
 	go func() {
-		<-ctx.Done()
-		grpclog.Info("shutting down HTTP gateway...")
-		gatewayCtxDone := gatewayCancel
-		gatewayCtxDone()
-		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer shutdownCancel()
-		if err := httpServer.Shutdown(shutdownCtx); err != nil {
-			grpclog.Errorf("HTTP gateway shutdown error: %v", err)
+		grpclog.Infof("HTTP gateway and Web UI listening on %s", httpPort)
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			grpclog.Fatalf("HTTP server error: %v", err)
 		}
 	}()
 
-	// Listen for OS signals
+	// 6. Wait for OS Shutdown Signals
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-sigChan
-	grpclog.Infof("received signal %v, shutting down...", sig)
+	grpclog.Infof("Received signal %v, shutting down...", sig)
 
+	// Trigger cancellation context for all background tasks
 	cancel()
 
-	// Shutdown gRPC server
-	_, grpcShutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer grpcShutdownCancel()
-	grpcServer.GracefulStop()
-	grpclog.Info("gRPC server stopped")
+	// 7. Graceful Shutdown
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
 
+	grpclog.Info("Shutting down HTTP server...")
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		grpclog.Errorf("HTTP server shutdown error: %v", err)
+	}
+
+	grpclog.Info("Shutting down gRPC server...")
+	grpcServer.GracefulStop()
+
+	grpclog.Info("Shutdown complete")
 	return nil
 }
 
-// createGateway now takes the configured grpcPort instead of relying on the constant
+// createGateway initializes the gRPC-Gateway reverse proxy
 func createGateway(ctx context.Context, grpcPort string) (http.Handler, error) {
 	mux := runtime.NewServeMux()
 

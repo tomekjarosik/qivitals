@@ -24,7 +24,7 @@ message SensorSpec {
 
 // SensorStatus contains ONLY the observed runtime state.
 message SensorStatus {
-  string state = 1;             // Computed state: "ACTIVE", "DEGRADED", "DEAD"
+  string state = 1;             // Computed state: "OK", "DEGRADED", "DEAD"
   string message = 2;           // Human-readable reason (e.g., "Disk 95% full")
   int64 last_ok_timestamp = 3;
   int64 last_updated_timestamp = 4;
