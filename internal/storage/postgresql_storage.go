@@ -38,7 +38,6 @@ func (p *PostgresSensorStorage) InitSchema(ctx context.Context) error {
 		failure_period BIGINT NOT NULL,
 		labels JSONB NOT NULL DEFAULT '{}'::jsonb,
 		registered_at BIGINT NOT NULL,
-		last_ok_timestamp BIGINT NOT NULL,
 		last_updated BIGINT NOT NULL,
 		metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
 		CONSTRAINT unique_namespace_name UNIQUE (namespace, name)
@@ -56,8 +55,8 @@ func (p *PostgresSensorStorage) Register(ctx context.Context, sensor *SensorInfo
 	}
 
 	query, args, err := p.sq.Insert("sensors").
-		Columns("id", "namespace", "name", "description", "graceful_period", "failure_period", "labels", "registered_at", "last_ok_timestamp", "last_updated", "metadata").
-		Values(sensor.ID, sensor.Namespace, sensor.Name, sensor.Description, sensor.GracefulPeriod, sensor.FailurePeriod, labelsJSON, sensor.RegisteredAt, sensor.RegisteredAt, sensor.RegisteredAt, "{}").
+		Columns("id", "namespace", "name", "description", "graceful_period", "failure_period", "labels", "registered_at", "last_updated", "metadata").
+		Values(sensor.ID, sensor.Namespace, sensor.Name, sensor.Description, sensor.GracefulPeriod, sensor.FailurePeriod, labelsJSON, sensor.RegisteredAt, sensor.RegisteredAt, "{}").
 		ToSql()
 	if err != nil {
 		return err
@@ -68,7 +67,7 @@ func (p *PostgresSensorStorage) Register(ctx context.Context, sensor *SensorInfo
 		// pgx specific way to check for Postgres Error codes
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // 23505 = unique_violation
-			return &DuplicateSensorError{SensorID: sensor.Name}
+			return ErrSensorAlreadyExists
 		}
 		return err
 	}
@@ -76,25 +75,25 @@ func (p *PostgresSensorStorage) Register(ctx context.Context, sensor *SensorInfo
 	return nil
 }
 
-func (p *PostgresSensorStorage) Update(ctx context.Context, sensorID string, updates *SensorInfo, updateMask []string) error {
-	if len(updateMask) == 0 {
+func (p *PostgresSensorStorage) Patch(ctx context.Context, sensorID string, updates *SensorInfo, columns []string) error {
+	if len(columns) == 0 {
 		return nil // Nothing to update!
 	}
 	builder := p.sq.Update("sensors").Where(squirrel.Eq{"id": sensorID})
 
-	for _, field := range updateMask {
-		switch field {
-		case "metadata.name":
+	for _, column := range columns {
+		switch column {
+		case "name":
 			builder = builder.Set("name", updates.Name)
-		case "metadata.namespace":
+		case "namespace":
 			builder = builder.Set("namespace", updates.Namespace)
-		case "metadata.description":
+		case "description":
 			builder = builder.Set("description", updates.Description)
-		case "spec.graceful_period_seconds":
+		case "graceful_period_seconds":
 			builder = builder.Set("graceful_period", updates.GracefulPeriod)
-		case "spec.failure_period_seconds":
+		case "failure_period_seconds":
 			builder = builder.Set("failure_period", updates.FailurePeriod)
-		case "metadata.labels":
+		case "labels":
 			labelsJSON, _ := json.Marshal(updates.Labels)
 			builder = builder.Set("labels", labelsJSON)
 		}
@@ -110,13 +109,13 @@ func (p *PostgresSensorStorage) Update(ctx context.Context, sensorID string, upd
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return &SensorNotFoundError{SensorID: sensorID}
+		return ErrSensorNotFound
 	}
 
 	return nil
 }
 
-func (p *PostgresSensorStorage) SendData(ctx context.Context, sensorID string, ok bool, metadata map[string]string) error {
+func (p *PostgresSensorStorage) SendData(ctx context.Context, sensorID string, metadata map[string]string) error {
 	metaJSON, _ := json.Marshal(metadata)
 	if string(metaJSON) == "null" {
 		metaJSON = []byte("{}")
@@ -125,17 +124,16 @@ func (p *PostgresSensorStorage) SendData(ctx context.Context, sensorID string, o
 	// Postgres JSONB magic: `metadata || $3` merges the new JSON map into the existing one!
 	query := `
 		UPDATE sensors 
-		SET last_updated = extract(epoch from now()), 
-		    last_ok_timestamp = CASE WHEN $1::boolean THEN extract(epoch from now()) ELSE last_ok_timestamp END,
-		    metadata = metadata || $2::jsonb
-		WHERE id = $3
+		SET last_updated = extract(epoch from now()),
+		    metadata = metadata || $1::jsonb
+		WHERE id = $2
 	`
-	tag, err := p.pool.Exec(ctx, query, ok, metaJSON, sensorID)
+	tag, err := p.pool.Exec(ctx, query, metaJSON, sensorID)
 	if err != nil {
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return &SensorNotFoundError{SensorID: sensorID}
+		return ErrSensorNotFound
 	}
 	return nil
 }
@@ -147,7 +145,7 @@ func (p *PostgresSensorStorage) GetStatus(ctx context.Context, sensorID string) 
 		return nil, err
 	}
 	if len(results) == 0 {
-		return nil, &SensorNotFoundError{SensorID: sensorID}
+		return nil, ErrSensorNotFound
 	}
 	return results[0], nil
 }
@@ -163,13 +161,13 @@ func (p *PostgresSensorStorage) Delete(ctx context.Context, sensorID string) err
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return &SensorNotFoundError{SensorID: sensorID}
+		return ErrSensorNotFound
 	}
 	return nil
 }
 
 func (p *PostgresSensorStorage) Query(ctx context.Context, filter QueryFilter) ([]*SensorState, error) {
-	builder := p.sq.Select("id", "namespace", "name", "description", "graceful_period", "failure_period", "labels", "registered_at", "last_ok_timestamp", "last_updated", "metadata").From("sensors")
+	builder := p.sq.Select("id", "namespace", "name", "description", "graceful_period", "failure_period", "labels", "registered_at", "last_updated", "metadata").From("sensors")
 
 	if filter.ID != "" {
 		builder = builder.Where(squirrel.Eq{"id": filter.ID})
@@ -232,7 +230,7 @@ func (p *PostgresSensorStorage) Query(ctx context.Context, filter QueryFilter) (
 		err := rows.Scan(
 			&info.ID, &info.Namespace, &info.Name, &info.Description,
 			&info.GracefulPeriod, &info.FailurePeriod, &labelsBytes, &info.RegisteredAt,
-			&state.LastOkTimestamp, &state.LastUpdated, &metadataBytes,
+			&state.LastUpdated, &metadataBytes,
 		)
 		if err != nil {
 			return nil, err

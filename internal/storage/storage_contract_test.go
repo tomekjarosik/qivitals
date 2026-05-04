@@ -34,12 +34,12 @@ func RunStorageContractTests(t *testing.T, setup func() SensorStorage, teardown 
 
 		// Edge case: Duplicate ID
 		err = storage.Register(ctx, sensor)
-		assert.IsType(t, &DuplicateSensorError{}, err)
+		assert.IsType(t, ErrSensorAlreadyExists, err)
 
 		// Edge case: Duplicate Namespace + Name
 		sensorDiffID := &SensorInfo{ID: "sensor-2", Namespace: "default", Name: "db-backup"}
 		err = storage.Register(ctx, sensorDiffID)
-		assert.IsType(t, &DuplicateSensorError{}, err)
+		assert.IsType(t, ErrSensorAlreadyExists, err)
 
 		// Edge case: Same Name, Different Namespace (Should Succeed)
 		sensorDiffNS := &SensorInfo{ID: "sensor-3", Namespace: "staging", Name: "db-backup"}
@@ -54,10 +54,10 @@ func RunStorageContractTests(t *testing.T, setup func() SensorStorage, teardown 
 
 		// Edge case: Get non-existent
 		_, err = storage.GetStatus(ctx, "does-not-exist")
-		assert.IsType(t, &SensorNotFoundError{}, err)
+		assert.IsType(t, ErrSensorNotFound, err)
 	})
 
-	t.Run("Update", func(t *testing.T) {
+	t.Run("Patch", func(t *testing.T) {
 		storage := setup()
 		defer teardown()
 		ctx := context.Background()
@@ -77,7 +77,7 @@ func RunStorageContractTests(t *testing.T, setup func() SensorStorage, teardown 
 			GracefulPeriod: 200,
 		}
 
-		err = storage.Update(ctx, "s1", updates, []string{"metadata.description", "spec.graceful_period_seconds"})
+		err = storage.Patch(ctx, "s1", updates, []string{"description", "graceful_period_seconds"})
 		require.NoError(t, err)
 
 		state, _ := storage.GetStatus(ctx, "s1")
@@ -85,9 +85,9 @@ func RunStorageContractTests(t *testing.T, setup func() SensorStorage, teardown 
 		assert.Equal(t, int64(200), state.Info.GracefulPeriod)
 		assert.Equal(t, "test", state.Info.Name, "Name should not have changed since it wasn't in updateMask")
 
-		// Edge case: Update non-existent
-		err = storage.Update(ctx, "does-not-exist", updates, []string{"metadata.description"})
-		assert.IsType(t, &SensorNotFoundError{}, err)
+		// Edge case: Patch non-existent
+		err = storage.Patch(ctx, "does-not-exist", updates, []string{"metadata.description"})
+		assert.IsType(t, ErrSensorNotFound, err)
 	})
 
 	t.Run("SendData", func(t *testing.T) {
@@ -98,19 +98,17 @@ func RunStorageContractTests(t *testing.T, setup func() SensorStorage, teardown 
 		storage.Register(ctx, &SensorInfo{ID: "s1", Name: "test"})
 
 		// Initial Data (OK)
-		err := storage.SendData(ctx, "s1", true, map[string]string{"version": "1.2.3"})
+		err := storage.SendData(ctx, "s1", map[string]string{"version": "1.2.3"})
 		require.NoError(t, err)
 
 		state1, _ := storage.GetStatus(ctx, "s1")
 		assert.Equal(t, "1.2.3", state1.Metadata["version"])
-		okTime1 := state1.LastOkTimestamp
 
 		// Second Data (Failed) -> Should update metadata but NOT LastOkTimestamp
-		err = storage.SendData(ctx, "s1", false, map[string]string{"error": "timeout"})
+		err = storage.SendData(ctx, "s1", map[string]string{"error": "timeout"})
 		require.NoError(t, err)
 
 		state2, _ := storage.GetStatus(ctx, "s1")
-		assert.Equal(t, okTime1, state2.LastOkTimestamp, "LastOkTimestamp should not increase on failure")
 		assert.GreaterOrEqual(t, state2.LastUpdated, state1.LastUpdated, "LastUpdated should always increase")
 
 		// Postgres JSONB || operator merges keys. Let's ensure memory storage does too (if you implemented merging).
@@ -119,8 +117,8 @@ func RunStorageContractTests(t *testing.T, setup func() SensorStorage, teardown 
 		assert.Equal(t, "timeout", state2.Metadata["error"])
 
 		// Edge case: SendData non-existent
-		err = storage.SendData(ctx, "does-not-exist", true, nil)
-		assert.IsType(t, &SensorNotFoundError{}, err)
+		err = storage.SendData(ctx, "does-not-exist", nil)
+		assert.IsType(t, ErrSensorNotFound, err)
 	})
 
 	t.Run("Delete", func(t *testing.T) {
@@ -134,11 +132,11 @@ func RunStorageContractTests(t *testing.T, setup func() SensorStorage, teardown 
 		require.NoError(t, err)
 
 		_, err = storage.GetStatus(ctx, "s1")
-		assert.IsType(t, &SensorNotFoundError{}, err)
+		assert.IsType(t, ErrSensorNotFound, err)
 
 		// Edge case: Delete already deleted
 		err = storage.Delete(ctx, "s1")
-		assert.IsType(t, &SensorNotFoundError{}, err)
+		assert.IsType(t, ErrSensorNotFound, err)
 	})
 
 	t.Run("Query Advanced Filters", func(t *testing.T) {
@@ -245,12 +243,12 @@ func RunExtendedStorageContractTests(t *testing.T, setup func() SensorStorage, t
 		err := storage.Register(ctx, initial)
 		require.NoError(t, err)
 
-		// Case: Empty Update Mask (Nothing should change except LastUpdated)
+		// Case: Empty Patch Mask (Nothing should change except LastUpdated)
 		updates := &SensorInfo{
 			Name:        "changed-name",
 			Description: "changed-desc",
 		}
-		err = storage.Update(ctx, "boundary-1", updates, []string{})
+		err = storage.Patch(ctx, "boundary-1", updates, []string{})
 		require.NoError(t, err)
 
 		state, _ := storage.GetStatus(ctx, "boundary-1")
@@ -258,7 +256,7 @@ func RunExtendedStorageContractTests(t *testing.T, setup func() SensorStorage, t
 		assert.Equal(t, "original description", state.Info.Description, "Description should not change with empty mask")
 
 		// Case: Invalid field in mask (System should handle gracefully)
-		err = storage.Update(ctx, "boundary-1", updates, []string{"non_existent_field"})
+		err = storage.Patch(ctx, "boundary-1", updates, []string{"non_existent_field"})
 		// Depending on your implementation, this might return an error or just ignore it.
 		// We assume the system should be robust.
 		if err != nil {
@@ -283,14 +281,14 @@ func RunExtendedStorageContractTests(t *testing.T, setup func() SensorStorage, t
 			go func(val int) {
 				defer wg.Done()
 				meta := map[string]string{fmt.Sprintf("key-%d", val): "active"}
-				_ = storage.SendData(ctx, sensorID, true, meta)
+				_ = storage.SendData(ctx, sensorID, meta)
 			}(i)
 
 			// Simulate concurrent Updates (Field updates)
 			go func(val int) {
 				defer wg.Done()
 				updates := &SensorInfo{Description: fmt.Sprintf("desc-%d", val)}
-				_ = storage.Update(ctx, sensorID, updates, []string{"metadata.description"})
+				_ = storage.Patch(ctx, sensorID, updates, []string{"metadata.description"})
 			}(i)
 		}
 

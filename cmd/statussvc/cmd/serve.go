@@ -33,7 +33,7 @@ func NewCmdServe() *cobra.Command {
 	// Add flags and bind to viper
 	cmd.Flags().String("grpc-port", "localhost:50051", "Address and port for gRPC server to listen on")
 	cmd.Flags().String("http-port", "localhost:8088", "Address and port for HTTP gateway and Web UI to listen on")
-	cmd.Flags().String("log-file", "server.log", "Path to log file")
+	cmd.Flags().String("log-file", "statussvc.log", "Path to log file")
 
 	viper.BindPFlag("grpc_port", cmd.Flags().Lookup("grpc-port"))
 	viper.BindPFlag("http_port", cmd.Flags().Lookup("http-port"))

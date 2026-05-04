@@ -27,14 +27,13 @@ func (m *MemorySensorStorage) Register(ctx context.Context, sensor *SensorInfo) 
 	defer m.mu.Unlock()
 
 	if _, exists := m.sensors[sensor.ID]; exists {
-		return &DuplicateSensorError{SensorID: sensor.ID}
+		return ErrSensorAlreadyExists
 	}
 
 	// Enforce unique (Namespace, Name) constraint
 	for _, existing := range m.sensors {
-		// Note: Assuming you add Namespace to SensorInfo. If not, just check Name.
 		if existing.Info.Name == sensor.Name && existing.Info.Namespace == sensor.Namespace {
-			return &DuplicateSensorError{SensorID: sensor.Name + " (name already in use)"}
+			return ErrSensorAlreadyExists
 		}
 	}
 
@@ -57,37 +56,36 @@ func (m *MemorySensorStorage) Register(ctx context.Context, sensor *SensorInfo) 
 			Labels:         labels,
 			RegisteredAt:   now,
 		},
-		LastOkTimestamp: now,
-		LastUpdated:     now,
-		Metadata:        make(map[string]string),
+		LastUpdated: now,
+		Metadata:    make(map[string]string),
 	}
 
 	return nil
 }
 
 // Update modifies an existing sensor by its unique ID
-func (m *MemorySensorStorage) Update(ctx context.Context, sensorID string, updates *SensorInfo, updateMask []string) error {
+func (m *MemorySensorStorage) Patch(ctx context.Context, sensorID string, updates *SensorInfo, columns []string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	state, exists := m.sensors[sensorID]
 	if !exists {
-		return &SensorNotFoundError{SensorID: sensorID}
+		return ErrSensorNotFound
 	}
 
-	for _, field := range updateMask {
+	for _, field := range columns {
 		switch field {
-		case "metadata.name":
+		case "name":
 			state.Info.Name = updates.Name
-		case "metadata.namespace":
+		case "namespace":
 			state.Info.Namespace = updates.Namespace
-		case "metadata.description":
+		case "description":
 			state.Info.Description = updates.Description
-		case "spec.graceful_period_seconds": // matching proto field name convention
+		case "graceful_period_seconds":
 			state.Info.GracefulPeriod = updates.GracefulPeriod
-		case "spec.failure_period_seconds":
+		case "failure_period_seconds":
 			state.Info.FailurePeriod = updates.FailurePeriod
-		case "metadata.labels":
+		case "labels":
 			labels := make(map[string]string)
 			for k, v := range updates.Labels {
 				labels[k] = v
@@ -101,20 +99,16 @@ func (m *MemorySensorStorage) Update(ctx context.Context, sensorID string, updat
 }
 
 // SendData updates the last OK timestamp and last update timestamp for a sensor
-func (m *MemorySensorStorage) SendData(ctx context.Context, sensorID string, ok bool, metadata map[string]string) error {
+func (m *MemorySensorStorage) SendData(ctx context.Context, sensorID string, metadata map[string]string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	state, exists := m.sensors[sensorID]
 	if !exists {
-		return &SensorNotFoundError{SensorID: sensorID}
+		return ErrSensorNotFound
 	}
 
 	now := time.Now().Unix()
-
-	if ok {
-		state.LastOkTimestamp = now
-	}
 
 	state.LastUpdated = now
 	for k, v := range metadata {
@@ -131,7 +125,7 @@ func (m *MemorySensorStorage) GetStatus(ctx context.Context, sensorID string) (*
 
 	state, exists := m.sensors[sensorID]
 	if !exists {
-		return nil, &SensorNotFoundError{SensorID: sensorID}
+		return nil, ErrSensorNotFound
 	}
 
 	return state, nil
@@ -149,7 +143,7 @@ func (m *MemorySensorStorage) GetByNaturalKey(ctx context.Context, namespace str
 		}
 	}
 
-	return nil, &SensorNotFoundError{SensorID: name}
+	return nil, ErrSensorNotFound
 }
 
 // Query returns all sensors matching the broader filter criteria
@@ -221,8 +215,6 @@ outer:
 				less = a.Info.Name < b.Info.Name
 			case "last_updated":
 				less = a.LastUpdated < b.LastUpdated
-			case "last_ok":
-				less = a.LastOkTimestamp < b.LastOkTimestamp
 			default:
 				// Default to registered time if unknown field
 				less = a.Info.RegisteredAt < b.Info.RegisteredAt
@@ -249,7 +241,7 @@ func (m *MemorySensorStorage) Delete(ctx context.Context, sensorID string) error
 	defer m.mu.Unlock()
 
 	if _, exists := m.sensors[sensorID]; !exists {
-		return &SensorNotFoundError{SensorID: sensorID}
+		return ErrSensorNotFound
 	}
 
 	delete(m.sensors, sensorID)

@@ -6,8 +6,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	v1 "github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
 	"github.com/tomekjarosik/one-status/internal/storage"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestRegisterSensor_New(t *testing.T) {
@@ -85,7 +88,7 @@ func TestSendSensorData(t *testing.T) {
 	sendResp, err := impl.ReportSensor(context.Background(), sendReq)
 	assert.NoError(t, err)
 	assert.NotNil(t, sendResp.Sensor)
-	assert.NotZero(t, sendResp.Sensor.Status.LastOkTimestamp)
+	assert.NotZero(t, sendResp.Sensor.Status.LastUpdatedTimestamp)
 
 	// Send failure data
 	sendReq2 := &v1.ReportSensorRequest{
@@ -154,7 +157,7 @@ func TestQuerySensors(t *testing.T) {
 	assert.Greater(t, len(queryResp.Sensors), 0)
 	for _, sensor := range queryResp.Sensors {
 		assert.Equal(t, "OK", sensor.Status.State)
-		assert.NotZero(t, sensor.Status.LastOkTimestamp)
+		assert.NotZero(t, sensor.Status.LastUpdatedTimestamp)
 	}
 
 	// Query all ACTIVE sensors (status filter)
@@ -364,8 +367,7 @@ func TestStatusCalculation(t *testing.T) {
 					GracefulPeriod: tt.gracefulPeriod,
 					FailurePeriod:  tt.failurePeriod,
 				},
-				LastOkTimestamp: lastOk,
-				LastUpdated:     lastOk,
+				LastUpdated: lastOk,
 			}
 
 			status := calculateSensorStatus(state)
@@ -427,6 +429,177 @@ func TestRegisterSensor_InvalidPeriods(t *testing.T) {
 				assert.NoError(t, err)
 				assert.NotNil(t, resp)
 			}
+		})
+	}
+}
+
+func TestPatchSensor(t *testing.T) {
+	strg := storage.NewMemorySensorStorage()
+	impl := NewStatusMonitorService(strg)
+	ctx := context.Background()
+
+	// Initial Seed Data
+	initialSensor := &v1.Sensor{
+		Metadata: &v1.ObjectMeta{
+			Id:          "test-sensor",
+			Name:        "Original Name",
+			Namespace:   "default",
+			Description: "Original Description",
+			Labels:      map[string]string{"env": "prod", "version": "1"},
+		},
+		Spec: &v1.SensorSpec{
+			GracefulPeriodSeconds: 60,
+			FailurePeriodSeconds:  120,
+		},
+	}
+	_, err := impl.RegisterSensor(ctx, &v1.RegisterSensorRequest{Sensor: initialSensor})
+	require.NoError(t, err)
+
+	tests := []struct {
+		name           string
+		request        *v1.PatchSensorRequest
+		expectedError  codes.Code
+		verifyRelation func(t *testing.T, updated *v1.Sensor) // Callback for deep verification
+	}{
+		{
+			name: "Success - Replace existing label",
+			request: &v1.PatchSensorRequest{
+				Id: "test-sensor",
+				Operations: []*v1.PatchOperation{
+					{Op: "replace", Path: "/metadata/labels/env", Value: `"staging"`},
+				},
+			},
+			expectedError: codes.OK,
+			verifyRelation: func(t *testing.T, updated *v1.Sensor) {
+				assert.Equal(t, "staging", updated.Metadata.Labels["env"])
+				assert.Equal(t, "1", updated.Metadata.Labels["version"], "Unrelated labels should persist")
+			},
+		},
+		{
+			name: "Success - Add new label",
+			request: &v1.PatchSensorRequest{
+				Id: "test-sensor",
+				Operations: []*v1.PatchOperation{
+					{Op: "add", Path: "/metadata/labels/region", Value: `"us-east-1"`},
+				},
+			},
+			expectedError: codes.OK,
+			verifyRelation: func(t *testing.T, updated *v1.Sensor) {
+				assert.Equal(t, "us-east-1", updated.Metadata.Labels["region"])
+				assert.Equal(t, "staging", updated.Metadata.Labels["env"])
+			},
+		},
+		{
+			name: "Success - Patch spec integer (via JSON string)",
+			request: &v1.PatchSensorRequest{
+				Id: "test-sensor",
+				Operations: []*v1.PatchOperation{
+					{Op: "replace", Path: "/spec/graceful_period_seconds", Value: `300`},
+				},
+			},
+			expectedError: codes.OK,
+			verifyRelation: func(t *testing.T, updated *v1.Sensor) {
+				assert.Equal(t, int64(300), updated.Spec.GracefulPeriodSeconds)
+			},
+		},
+		{
+			name: "Success - Patch spec integer (via JSON string)",
+			request: &v1.PatchSensorRequest{
+				Id: "test-sensor",
+				Operations: []*v1.PatchOperation{
+					{Op: "replace", Path: "/spec/failure_period_seconds", Value: `300`},
+				},
+			},
+			expectedError: codes.OK,
+			verifyRelation: func(t *testing.T, updated *v1.Sensor) {
+				assert.Equal(t, int64(300), updated.Spec.FailurePeriodSeconds)
+			},
+		},
+		{
+			name: "Success - Remove a label",
+			request: &v1.PatchSensorRequest{
+				Id: "test-sensor",
+				Operations: []*v1.PatchOperation{
+					{Op: "remove", Path: "/metadata/labels/version"},
+				},
+			},
+			expectedError: codes.OK,
+			verifyRelation: func(t *testing.T, updated *v1.Sensor) {
+				_, exists := updated.Metadata.Labels["version"]
+				assert.False(t, exists)
+			},
+		},
+		{
+			name: "Failure - Missing ID",
+			request: &v1.PatchSensorRequest{
+				Id: "",
+				Operations: []*v1.PatchOperation{
+					{Op: "replace", Path: "/metadata/labels/env", Value: `"dev"`},
+				},
+			},
+			expectedError: codes.InvalidArgument,
+		},
+		{
+			name: "Failure - Unauthorized path (Immutable field)",
+			request: &v1.PatchSensorRequest{
+				Id: "test-sensor",
+				Operations: []*v1.PatchOperation{
+					{Op: "replace", Path: "/metadata/id", Value: `"New ID"`},
+				},
+			},
+			expectedError: codes.InvalidArgument,
+		},
+		{
+			name: "Failure - Non-existent sensor",
+			request: &v1.PatchSensorRequest{
+				Id: "ghost-sensor",
+				Operations: []*v1.PatchOperation{
+					{Op: "replace", Path: "/metadata/labels/env", Value: `"dev"`},
+				},
+			},
+			expectedError: codes.NotFound,
+		},
+		{
+			name: "Failure - Unsupported Operation",
+			request: &v1.PatchSensorRequest{
+				Id: "test-sensor",
+				Operations: []*v1.PatchOperation{
+					{Op: "move", Path: "/metadata/labels/env", Value: `"dev"`},
+				},
+			},
+			expectedError: codes.InvalidArgument,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, err := impl.PatchSensor(ctx, tt.request)
+
+			if tt.expectedError != codes.OK {
+				require.Error(t, err)
+				st, ok := status.FromError(err)
+				require.True(t, ok)
+				assert.Equal(t, tt.expectedError, st.Code())
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+			require.NotNil(t, resp.Sensor)
+
+			// Verify the result matches the logic (Deep Verification)
+			if tt.verifyRelation != nil {
+				tt.verifyRelation(t, resp.Sensor)
+			}
+
+			// Critical Step: Verify Persistence (The "Map vs Territory" Check)
+			// We fetch directly from storage to ensure the 'map' (the response)
+			// matches the 'territory' (the actual database/storage).
+			persistedState, err := strg.GetStatus(ctx, tt.request.Id)
+			require.NoError(t, err)
+
+			// We use the response's value as the ground truth for what was saved
+			assert.Equal(t, resp.Sensor.Metadata.Labels, persistedState.Info.Labels)
 		})
 	}
 }

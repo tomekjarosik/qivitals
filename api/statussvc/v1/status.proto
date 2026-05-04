@@ -13,7 +13,8 @@ message ObjectMeta {
   string namespace = 2;
   string name = 3;
   string description = 4;
-  map<string, string> labels = 5; // Native map replaces the old Label message
+  map<string, string> labels = 5;
+  string resource_version = 6;
 }
 
 // SensorSpec contains ONLY the desired configuration.
@@ -25,8 +26,6 @@ message SensorSpec {
 // SensorStatus contains ONLY the observed runtime state.
 message SensorStatus {
   string state = 1;             // Computed state: "OK", "DEGRADED", "DEAD"
-  string message = 2;           // Human-readable reason (e.g., "Disk 95% full")
-  int64 last_ok_timestamp = 3;
   int64 last_updated_timestamp = 4;
   map<string, string> reported_data = 5; // Generic telemetry
 }
@@ -48,13 +47,19 @@ message RegisterSensorResponse {
   Sensor sensor = 1; // Returns the fully initialized sensor (with ID and timestamps)
 }
 
-message UpdateSensorRequest {
-  Sensor sensor = 1;
-  google.protobuf.FieldMask update_mask = 2;
+message PatchOperation {
+  string op = 1;    // "add", "remove", "replace", "move", "copy", "test"
+  string path = 2;  // JSON Pointer, e.g. "/metadata/name"
+  string value = 3; // JSON-encoded value (or use google.protobuf.Value)
 }
 
-message UpdateSensorResponse {
-  Sensor sensor = 1; // Returns the updated sensor
+message PatchSensorRequest {
+  string id = 1;
+  repeated PatchOperation operations = 2;
+}
+
+message PatchSensorResponse {
+  Sensor sensor = 1;
 }
 
 message ReportSensorRequest {
@@ -65,6 +70,10 @@ message ReportSensorRequest {
 
   string message = 4; // E.g., "Database backup completed successfully in 14s"
   map<string, string> data = 5;
+
+  // For bots: a signature.
+  // For humans: a Bearer token (the magic link token).
+  bytes proof = 6;
 }
 
 message ReportSensorResponse {
@@ -110,11 +119,10 @@ service StatusService {
     };
   }
 
-  rpc UpdateSensor(UpdateSensorRequest) returns (UpdateSensorResponse) {
+  rpc PatchSensor(PatchSensorRequest) returns (PatchSensorResponse) {
     option (google.api.http) = {
-      // Notice the path uses metadata.id to match the nested structure!
-      patch: "/api/v1/sensors/{sensor.metadata.id}"
-      body: "*"
+      patch: "/api/v1/sensors/{id}"
+      body: "operations"   // body contains just the array of operations
     };
   }
 

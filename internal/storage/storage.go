@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 )
 
 // SensorStatusType represents the current state of a sensor
@@ -23,14 +24,14 @@ type SensorInfo struct {
 	FailurePeriod  int64
 	Labels         map[string]string
 	RegisteredAt   int64
+	Version        string
 }
 
 // SensorState tracks the current state of a sensor
 type SensorState struct {
-	Info            *SensorInfo
-	LastOkTimestamp int64
-	LastUpdated     int64
-	Metadata        map[string]string
+	Info        *SensorInfo
+	LastUpdated int64
+	Metadata    map[string]string
 }
 
 type QueryFilter struct {
@@ -50,23 +51,26 @@ type QueryFilter struct {
 	Cursor    string
 }
 
+var ErrSensorAlreadyExists = errors.New("sensor already exists")
+var ErrSensorNotFound = errors.New("sensor not found")
+
 // SensorStorage defines the interface for sensor persistence
 type SensorStorage interface {
 	// Register adds a new sensor. The DB should enforce a unique constraint
 	// on (Namespace, Name) to prevent duplicates.
 	Register(ctx context.Context, sensor *SensorInfo) error
 
-	// Update modifies an existing sensor by its unique ID
-	Update(ctx context.Context, sensorID string, updates *SensorInfo, updateMask []string) error
+	// Delete removes a sensor from the storage
+	Delete(ctx context.Context, sensorID string) error
+
+	// Patch modifies an existing sensor by its unique ID
+	Patch(ctx context.Context, sensorID string, updates *SensorInfo, columns []string) error
 
 	// SendData processes a heartbeat/signal using the unique ID
-	SendData(ctx context.Context, sensorID string, ok bool, metadata map[string]string) error
+	SendData(ctx context.Context, sensorID string, metadata map[string]string) error
 
 	// GetStatus retrieves a single sensor's full state by its unique ID
 	GetStatus(ctx context.Context, sensorID string) (*SensorState, error)
-
-	// Delete removes a sensor from the storage
-	Delete(ctx context.Context, sensorID string) error
 
 	// Query returns all sensors matching the broader filter criteria
 	Query(ctx context.Context, filter QueryFilter) ([]*SensorState, error)

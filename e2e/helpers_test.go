@@ -2,7 +2,6 @@ package e2e
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"net"
 	"os/exec"
@@ -11,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	v1 "github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 const e2eGrpcPort = "localhost:50099" // Use a specific port to avoid dev conflicts
@@ -85,15 +86,15 @@ func Report(t *testing.T, id string, data ...string) {
 	require.NoError(t, err, "Failed to report data for %s. Err: %s", id, stderr)
 }
 
-func Query(t *testing.T, args ...string) E2EQueryResponse {
+func Query(t *testing.T, args ...string) *v1.QuerySensorsResponse {
 	queryArgs := append([]string{"query", "-m"}, args...)
 	out, stderr, err := runCLI(t, queryArgs...)
 	require.NoError(t, err, "Query failed. Err: %s", stderr)
 
-	var response E2EQueryResponse
-	err = json.Unmarshal([]byte(out), &response)
+	var response v1.QuerySensorsResponse
+	err = protojson.Unmarshal([]byte(out), &response)
 	require.NoError(t, err, "Failed to parse JSON output")
-	return response
+	return &response
 }
 
 func RequireState(t *testing.T, id, expectedState string) {
@@ -111,24 +112,4 @@ func Delete(t *testing.T, id string) {
 	out, stderr, err := runCLI(t, "delete", "--id", id)
 	require.NoError(t, err, "Failed to delete sensor %s. Err: %s", id, stderr)
 	require.Contains(t, out, "deleted successfully")
-}
-
-// --- Domain Models for JSON Parsing ---
-type E2ESensor struct {
-	Metadata struct { // <--- Added Metadata block!
-		Id        string `json:"id"`
-		Name      string `json:"name"`
-		Namespace string `json:"namespace"`
-	} `json:"metadata"`
-	Spec struct {
-		GracefulPeriod int64 `json:"gracefulPeriodSeconds,string"`
-	} `json:"spec"`
-	Status struct {
-		State        string            `json:"state"`
-		ReportedData map[string]string `json:"reportedData"`
-	} `json:"status"`
-}
-
-type E2EQueryResponse struct {
-	Sensors []E2ESensor `json:"sensors"`
 }

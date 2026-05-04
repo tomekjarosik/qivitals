@@ -67,7 +67,6 @@ func runQuery(cmd *cobra.Command, _ []string, id, name, namespace, search string
 		return fmt.Errorf("failed to parse labels: %w", err)
 	}
 
-	// Map CLI arguments to the advanced fields in our Proto schema
 	req := &v1.QuerySensorsRequest{
 		Id:           id,
 		Name:         name,
@@ -103,11 +102,11 @@ func printQueryResult(count int, sensors []*v1.Sensor) {
 	fmt.Printf("%-35s%-25s%-12s%-25s\n", "----------------", "---------", "------", "--------------")
 	for _, s := range sensors {
 		state := "UNKNOWN"
-		var lastOk int64
+		var lastUpdated int64
 
 		if s.Status != nil {
 			state = s.Status.State
-			lastOk = s.Status.LastOkTimestamp
+			lastUpdated = s.Status.LastUpdatedTimestamp
 		}
 
 		// Create a nice human-readable name string: namespace/name
@@ -131,7 +130,7 @@ func printQueryResult(count int, sensors []*v1.Sensor) {
 			displayName,
 			shortID,
 			state,
-			timeString(lastOk))
+			timeString(lastUpdated))
 	}
 	fmt.Println()
 }

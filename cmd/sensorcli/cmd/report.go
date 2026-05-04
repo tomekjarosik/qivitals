@@ -53,7 +53,7 @@ func runReport(cmd *cobra.Command, _ []string, sensorID string, data map[string]
 
 	fmt.Printf("Report sent successfully. Sensor: %s, Timestamp: %s\n",
 		response.Sensor.Metadata.Id,
-		time.Unix(response.Sensor.Status.LastOkTimestamp, 0).Format("2006-01-02 15:04:05"))
+		time.Unix(response.Sensor.Status.LastUpdatedTimestamp, 0).Format("2006-01-02 15:04:05"))
 
 	return nil
 }

@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	v1 "github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
 )
 
 // --- Real-World Workflows ---
@@ -17,13 +19,13 @@ func TestWorkflow_MonthlyBills(t *testing.T) {
 	days35 := int64(35 * 24 * 60 * 60)
 	waterBillID := Register(t, "home", "water-bill", "Monthly water utility bill", days30, days35, "category=bills", "type=manual")
 
-	// 2. Action: Human clicks "I paid this" (sends a report)
+	// Action: Human clicks "I paid this" (sends a report)
 	Report(t, waterBillID, "paid_amount=45.50", "method=bank_transfer")
 
-	// 3. Verify: Bill is marked as ACTIVE (paid)
+	// Verify: Bill is marked as ACTIVE (paid)
 	RequireState(t, waterBillID, "OK")
 
-	// 4. Verify details
+	// Verify details
 	res := Query(t, "--namespace", "home", "--name", "water-bill")
 	assert.Equal(t, "45.50", res.Sensors[0].Status.ReportedData["paid_amount"])
 }
@@ -121,7 +123,7 @@ func TestWorkflow_AdvancedQueryFiltering(t *testing.T) {
 	Register(t, "chores", "clean-backup-drives", "Manual cleanup of old tapes", 86400, 172800, "manual=true")
 
 	// Helper to extract names from a query response
-	getNames := func(resp E2EQueryResponse) []string {
+	getNames := func(resp *v1.QuerySensorsResponse) []string {
 		var names []string
 		for _, s := range resp.Sensors {
 			names = append(names, s.Metadata.Name)
@@ -162,4 +164,156 @@ func TestWorkflow_AdvancedQueryFiltering(t *testing.T) {
 	names = getNames(resCritical)
 	assert.Contains(t, names, "db-backup-us-east")
 	assert.Contains(t, names, "db-backup-eu-west")
+}
+
+// TestWorkflow_Update_Success verifies that passing a sequence of valid flags
+// to the 'update' command correctly modifies the sensor in the database.
+func TestWorkflow_Update_Success(t *testing.T) {
+	// 1. Start the server (This helper is part of your e2e package)
+	serverCmd := startTestServer(t)
+	defer serverCmd.Process.Kill()
+
+	// 2. Setup: Register a baseline sensor to act as our target
+	// We use the Register helper to create a sensor with predictable initial values.
+	// Using a natural key (namespace/name) to make the test more human-readable.
+	initialNamespace := "production"
+	initialName := "web-api"
+	initialDesc := "Primary API server"
+	initialGraceful := int64(3600) // 1 hour
+	initialFailure := int64(7200)  // 2 hours
+
+	sensorID := Register(t, initialNamespace, initialName, initialDesc, initialGraceful, initialFailure, "env=prod", "tier=backend")
+
+	updateArgs := []string{
+		"update",
+		"--id", sensorID,
+		"--desc", "Updated API Description",
+		"--graceful", "1800",
+	}
+
+	// We execute the CLI tool as a separate process
+	out, stderr, err := runCLI(t, updateArgs...)
+	require.NoError(t, err, "CLI Patch command failed. Stderr: %s", stderr)
+	require.Contains(t, out, "updated successfully", "CLI did not report success")
+
+	queryArgs := []string{"query", "--namespace", initialNamespace, "--name", initialName}
+	resp := Query(t, queryArgs...)
+
+	require.Len(t, resp.Sensors, 1, "Sensor should still exist in the namespace")
+	updatedSensor := resp.Sensors[0]
+
+	// Assert all updated fields
+	assert.Equal(t, "Updated API Description", updatedSensor.Metadata.Description)
+	assert.Equal(t, int64(1800), updatedSensor.Spec.GracefulPeriodSeconds)
+
+	// Assert that unmentioned fields remained unchanged (The "Regression" check)
+	assert.Equal(t, initialName, updatedSensor.Metadata.Name)
+	assert.Equal(t, initialNamespace, updatedSensor.Metadata.Namespace)
+	assert.Equal(t, "prod", updatedSensor.Metadata.Labels["env"])
+}
+
+func TestWorkflow_Update_AllFlagsSeparately(t *testing.T) {
+	serverCmd := startTestServer(t)
+	defer serverCmd.Process.Kill()
+
+	// Define a struct to represent a single flag-based test case
+	type updateTestCase struct {
+		name   string
+		args   []string                         // The flags to pass to the CLI
+		verify func(t *testing.T, s *v1.Sensor) // How to verify the change
+	}
+
+	// Define the baseline sensor
+	initialNamespace := "production"
+	initialName := "web-api"
+	initialDesc := "Original Description"
+	initialGraceful := int64(3600)
+	initialFailure := int64(7200)
+
+	// Register the baseline
+	sensorID := Register(t, initialNamespace, initialName, initialDesc, initialGraceful, initialFailure, "env=prod", "tier=backend")
+
+	tests := []updateTestCase{
+		{
+			name: "Patch Description",
+			args: []string{"update", "--id", sensorID, "--desc", "New Description"},
+			verify: func(t *testing.T, s *v1.Sensor) {
+				assert.Equal(t, "New Description", s.Metadata.Description)
+			},
+		},
+		{
+			name: "Rename Sensor",
+			args: []string{"update", "--id", sensorID, "--new-name", "new-web-api"},
+			verify: func(t *testing.T, s *v1.Sensor) {
+				assert.Equal(t, "new-web-api", s.Metadata.Name)
+			},
+		},
+		{
+			name: "Rename Namespace",
+			args: []string{"update", "--id", sensorID, "--new-namespace", "ns_x"},
+			verify: func(t *testing.T, s *v1.Sensor) {
+				assert.Equal(t, "ns_x", s.Metadata.Namespace)
+			},
+		},
+		{
+			name: "Patch Graceful Period",
+			args: []string{"update", "--id", sensorID, "--graceful", "1800"},
+			verify: func(t *testing.T, s *v1.Sensor) {
+				assert.Equal(t, int64(1800), s.Spec.GracefulPeriodSeconds)
+			},
+		},
+		{
+			name: "Patch Failure Period",
+			args: []string{"update", "--id", sensorID, "--failure", "5000"},
+			verify: func(t *testing.T, s *v1.Sensor) {
+				assert.Equal(t, int64(5000), s.Spec.FailurePeriodSeconds)
+			},
+		},
+		{
+			name: "Rename Sensor",
+			args: []string{"update", "--id", sensorID, "--new-name", "new-web-api"},
+			verify: func(t *testing.T, s *v1.Sensor) {
+				assert.Equal(t, "new-web-api", s.Metadata.Name)
+			},
+		},
+		{
+			name: "Move Namespace",
+			args: []string{"update", "--id", sensorID, "--new-namespace", "staging"},
+			verify: func(t *testing.T, s *v1.Sensor) {
+				assert.Equal(t, "staging", s.Metadata.Namespace)
+			},
+		},
+		{
+			name: "Add Label",
+			args: []string{"update", "--id", sensorID, "--label", "owner=alice"},
+			verify: func(t *testing.T, s *v1.Sensor) {
+				assert.Equal(t, "alice", s.Metadata.Labels["owner"])
+				assert.Equal(t, "prod", s.Metadata.Labels["env"]) // Ensure old labels persist
+			},
+		},
+		{
+			name: "Remove Label",
+			args: []string{"update", "--id", sensorID, "--remove-label", "tier"},
+			verify: func(t *testing.T, s *v1.Sensor) {
+				_, exists := s.Metadata.Labels["tier"]
+				assert.False(t, exists)
+				assert.Equal(t, "prod", s.Metadata.Labels["env"]) // Ensure others remain
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, stderr, err := runCLI(t, tt.args...)
+			require.NoError(t, err, "CLI error for %s: %s", tt.name, stderr)
+			require.Contains(t, out, "updated successfully")
+
+			queryArgs := []string{"query", "--id", sensorID}
+			resp := Query(t, queryArgs...)
+			require.Len(t, resp.Sensors, 1)
+			updatedSensor := resp.Sensors[0]
+
+			tt.verify(t, updatedSensor)
+		})
+	}
 }

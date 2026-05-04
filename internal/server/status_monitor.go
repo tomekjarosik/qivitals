@@ -68,7 +68,7 @@ func (s *StatusMonitorService) ReportSensor(ctx context.Context, req *v1.ReportS
 		targetID = res[0].Info.ID
 	}
 
-	if err := s.storage.SendData(ctx, targetID, true, req.Data); err != nil {
+	if err := s.storage.SendData(ctx, targetID, req.Data); err != nil {
 		return nil, err
 	}
 
@@ -77,7 +77,6 @@ func (s *StatusMonitorService) ReportSensor(ctx context.Context, req *v1.ReportS
 	if err != nil {
 		return nil, err
 	}
-	// TODO: handle req.message
 	return &v1.ReportSensorResponse{
 		Sensor: buildProtoSensor(state),
 	}, nil
@@ -85,8 +84,7 @@ func (s *StatusMonitorService) ReportSensor(ctx context.Context, req *v1.ReportS
 
 func (s *StatusMonitorService) DeleteSensor(ctx context.Context, req *v1.DeleteSensorRequest) (*v1.DeleteSensorResponse, error) {
 	if err := s.storage.Delete(ctx, req.Id); err != nil {
-		var sensorNotFoundError *storage.SensorNotFoundError
-		if errors.As(err, &sensorNotFoundError) {
+		if errors.Is(err, storage.ErrSensorNotFound) {
 			return nil, err // Returning gRPC error is standard
 		}
 		return nil, err
@@ -150,12 +148,6 @@ func buildProtoSensor(state *storage.SensorState) *v1.Sensor {
 		labels = make(map[string]string)
 	}
 
-	msg := ""
-	if state.Metadata != nil {
-		msg = state.Metadata["_message"]
-		delete(state.Metadata, "_message") // Hide internal tracking key from reported_data
-	}
-
 	return &v1.Sensor{
 		Metadata: &v1.ObjectMeta{
 			Id:          state.Info.ID,
@@ -170,8 +162,6 @@ func buildProtoSensor(state *storage.SensorState) *v1.Sensor {
 		},
 		Status: &v1.SensorStatus{
 			State:                computedState,
-			Message:              msg,
-			LastOkTimestamp:      state.LastOkTimestamp,
 			LastUpdatedTimestamp: state.LastUpdated,
 			ReportedData:         state.Metadata,
 		},
@@ -180,7 +170,7 @@ func buildProtoSensor(state *storage.SensorState) *v1.Sensor {
 
 func calculateSensorStatus(state *storage.SensorState) string {
 	now := time.Now().Unix()
-	age := now - state.LastOkTimestamp
+	age := now - state.LastUpdated
 
 	if age < state.Info.GracefulPeriod {
 		return "OK"

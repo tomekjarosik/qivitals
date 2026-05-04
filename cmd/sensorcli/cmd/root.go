@@ -63,6 +63,7 @@ Register sensors, send health check signals, and query sensor statuses all from 
 		NewCmdQuery(),
 		NewCmdStatus(),
 		NewCmdDelete(),
+		NewCmdUpdate(),
 	)
 
 	return rootCmd

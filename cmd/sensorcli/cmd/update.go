@@ -2,11 +2,10 @@ package cmd
 
 import (
 	"fmt"
-	"strings"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	v1 "github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
-	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 func NewCmdUpdate() *cobra.Command {
@@ -14,6 +13,8 @@ func NewCmdUpdate() *cobra.Command {
 		sensorID        string
 		namespace       string
 		sensorName      string
+		newName         string
+		newNamespace    string
 		description     string
 		gracefulSeconds int64
 		failureSeconds  int64
@@ -24,152 +25,128 @@ func NewCmdUpdate() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update [flags]",
 		Short: "Partially update an existing sensor's configuration",
-		Long: `Update specific properties or labels of an already registered sensor.
+		Long: `Patch specific properties or labels of an already registered sensor.
 
-This command performs a partial update. Only the properties you explicitly 
-provide will be modified.
-
-When modifying labels, the CLI merges your changes with the existing labels.
+Identify the sensor using EITHER its --id OR its --namespace and --name.
 
 Examples:
-  # Update a property
+  # Patch using unique ID
   sensorcli update --id 550e8400-e29b --failure 3600
 
-  # Add a new label and update an existing one
-  sensorcli update --id 550e8400-e29b --label "tier:backend" --label "env:staging"
+  # Patch using human-readable Namespace & Name
+  sensorcli update --namespace db --name "Daily Backup" --graceful 1800
 
-  # Remove a label
-  sensorcli update --id 550e8400-e29b --remove-label "temporary-debug"`,
+  # Rename a sensor
+  sensorcli update --namespace infra --name "old-job" --new-name "new-job"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runUpdate(cmd, sensorID, namespace, sensorName, description, gracefulSeconds, failureSeconds, labelsToAdd, labelsToRemove)
+			if sensorID == "" && sensorName == "" {
+				return fmt.Errorf("must provide either --id or --name to identify the sensor to update")
+			}
+			return runUpdate(cmd, sensorID, namespace, sensorName, newName, newNamespace, description, gracefulSeconds, failureSeconds, labelsToAdd, labelsToRemove)
 		},
 	}
 
-	cmd.Flags().StringVarP(&sensorID, "id", "i", "", "Unique sensor UUID to update (required)")
-	cmd.Flags().StringVar(&namespace, "namespace", "", "New namespace for the sensor")
-	cmd.Flags().StringVarP(&sensorName, "name", "n", "", "New human-readable sensor name")
+	cmd.Flags().StringVarP(&sensorID, "id", "i", "", "Unique sensor UUID to update")
+	cmd.Flags().StringVar(&namespace, "namespace", "default", "Current namespace (used with --name)")
+	cmd.Flags().StringVarP(&sensorName, "name", "n", "", "Current sensor name")
+
+	cmd.Flags().StringVar(&newName, "new-name", "", "Rename the sensor")
+	cmd.Flags().StringVar(&newNamespace, "new-namespace", "", "Move sensor to a new namespace")
 	cmd.Flags().StringVar(&description, "desc", "", "New sensor description")
 	cmd.Flags().Int64Var(&gracefulSeconds, "graceful", 0, "New graceful period in seconds")
 	cmd.Flags().Int64Var(&failureSeconds, "failure", 0, "New failure period in seconds")
-	cmd.Flags().StringArrayVarP(&labelsToAdd, "label", "l", []string{}, "Labels to add/update as key:value (can be repeated)")
-	cmd.Flags().StringArrayVar(&labelsToRemove, "remove-label", []string{}, "Label keys to remove (can be repeated)")
-
-	cmd.MarkFlagRequired("id")
+	cmd.Flags().StringArrayVarP(&labelsToAdd, "label", "l", []string{}, "Labels to add/update as key:value")
+	cmd.Flags().StringArrayVar(&labelsToRemove, "remove-label", []string{}, "Label keys to remove")
 
 	return cmd
 }
 
-func runUpdate(cmd *cobra.Command, sensorID, namespace, sensorName, description string, gracefulSeconds, failureSeconds int64, labelsToAdd, labelsToRemove []string) error {
+func runUpdate(cmd *cobra.Command, sensorID, namespace, sensorName, newName, newNamespace, description string, gracefulSeconds, failureSeconds int64, labelsToAdd, labelsToRemove []string) error {
 	client, conn, err := NewStatusClient(cmd.Context())
 	if err != nil {
 		return fmt.Errorf("failed to connect to gRPC server: %w", err)
 	}
 	defer conn.Close()
 
-	// Initialize the full Sensor structure required for the update payload
-	sensorObj := &v1.Sensor{
-		Metadata: &v1.ObjectMeta{
-			Id: sensorID,
-		},
-		Spec: &v1.SensorSpec{},
+	// 1. Resolve the ID if a Natural Key was provided
+	if sensorID == "" {
+		queryResp, err := client.QuerySensors(cmd.Context(), &v1.QuerySensorsRequest{
+			Namespace: namespace,
+			Name:      sensorName,
+		})
+		if err != nil || len(queryResp.Sensors) == 0 {
+			return fmt.Errorf("sensor '%s/%s' not found", namespace, sensorName)
+		}
+		sensorID = queryResp.Sensors[0].Metadata.Id
 	}
 
-	var updatePaths []string
+	var patches []*v1.PatchOperation
 
-	// Check metadata updates
-	if cmd.Flags().Changed("name") {
-		sensorObj.Metadata.Name = sensorName
-		updatePaths = append(updatePaths, "metadata.name")
+	if cmd.Flags().Changed("new-name") {
+		patches = append(patches, &v1.PatchOperation{
+			Op:    "replace",
+			Path:  "/metadata/name",
+			Value: fmt.Sprintf("\"%s\"", newName),
+		})
 	}
-	if cmd.Flags().Changed("namespace") {
-		sensorObj.Metadata.Namespace = namespace
-		updatePaths = append(updatePaths, "metadata.namespace")
+	if cmd.Flags().Changed("new-namespace") {
+		patches = append(patches, &v1.PatchOperation{
+			Op:    "replace",
+			Path:  "/metadata/namespace",
+			Value: fmt.Sprintf("\"%s\"", newNamespace),
+		})
 	}
 	if cmd.Flags().Changed("desc") {
-		sensorObj.Metadata.Description = description
-		updatePaths = append(updatePaths, "metadata.description")
+		patches = append(patches, &v1.PatchOperation{
+			Op:    "replace",
+			Path:  "/metadata/description",
+			Value: fmt.Sprintf("\"%s\"", description),
+		})
 	}
 
-	// Check spec updates
 	if cmd.Flags().Changed("graceful") {
-		sensorObj.Spec.GracefulPeriodSeconds = gracefulSeconds
-		updatePaths = append(updatePaths, "spec.graceful_period_seconds")
+		patches = append(patches, &v1.PatchOperation{
+			Op:    "replace",
+			Path:  "/spec/graceful_period_seconds",
+			Value: strconv.FormatInt(gracefulSeconds, 10),
+		})
 	}
 	if cmd.Flags().Changed("failure") {
-		sensorObj.Spec.FailurePeriodSeconds = failureSeconds
-		updatePaths = append(updatePaths, "spec.failure_period_seconds")
+		patches = append(patches, &v1.PatchOperation{
+			Op:    "replace",
+			Path:  "/spec/failure_period_seconds",
+			Value: strconv.FormatInt(failureSeconds, 10),
+		})
 	}
 
-	// Handle Label modifications
-	labelsChanged := len(labelsToAdd) > 0 || len(labelsToRemove) > 0
-	if labelsChanged {
-		// 1. Fetch current labels
-		queryResp, err := client.QuerySensors(cmd.Context(), &v1.QuerySensorsRequest{Id: sensorID})
-		if err != nil {
-			return fmt.Errorf("failed to fetch current sensor state for label update: %w", err)
-		}
-		if len(queryResp.Sensors) == 0 {
-			return fmt.Errorf("sensor '%s' not found", sensorID)
-		}
-
-		existingSensor := queryResp.Sensors[0]
-		if existingSensor.Metadata == nil {
-			return fmt.Errorf("server returned invalid sensor metadata")
-		}
-
-		// Initialize local map with existing labels
-		currentLabels := existingSensor.Metadata.Labels
-		if currentLabels == nil {
-			currentLabels = make(map[string]string)
-		}
-
-		// 2. Remove specified labels
-		for _, keyToRemove := range labelsToRemove {
-			delete(currentLabels, keyToRemove)
-		}
-
-		// 3. Add/Update specified labels
-		for _, lblStr := range labelsToAdd {
-			// Labels are expected as key=value or key:value based on your parsing pref.
-			// We'll split on = or : depending on what your CLI docs say (your docs use :)
-			delimiter := ":"
-			if strings.Contains(lblStr, "=") {
-				delimiter = "="
-			}
-			parts := strings.SplitN(lblStr, delimiter, 2)
-			if len(parts) != 2 {
-				return fmt.Errorf("invalid label format '%s', expected key:value or key=value", lblStr)
-			}
-			currentLabels[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
-		}
-
-		// 4. Assign the map back to the update payload
-		sensorObj.Metadata.Labels = currentLabels
-		updatePaths = append(updatePaths, "metadata.labels")
+	for _, label := range labelsToRemove {
+		patches = append(patches, &v1.PatchOperation{
+			Op:   "remove",
+			Path: fmt.Sprintf("/metadata/labels/%s", label),
+		})
 	}
-
-	if len(updatePaths) == 0 {
-		return fmt.Errorf("no update fields provided. specify at least one field to update (e.g., --desc, --label)")
-	}
-
-	// Create the FieldMask targeting the Sensor object
-	mask, err := fieldmaskpb.New(sensorObj, updatePaths...)
+	labelsToAddMap, err := parseLabels(labelsToAdd)
 	if err != nil {
-		return fmt.Errorf("failed to create field mask: %w", err)
+		return fmt.Errorf("failed to parse labels to add: %w", err)
+	}
+	for key, value := range labelsToAddMap {
+		patches = append(patches, &v1.PatchOperation{
+			Op:    "add",
+			Path:  fmt.Sprintf("/metadata/labels/%s", key),
+			Value: fmt.Sprintf("\"%s\"", value),
+		})
 	}
 
-	req := &v1.UpdateSensorRequest{
-		Sensor:     sensorObj,
-		UpdateMask: mask,
+	req := &v1.PatchSensorRequest{
+		Id:         sensorID,
+		Operations: patches,
 	}
 
-	response, err := client.UpdateSensor(cmd.Context(), req)
+	response, err := client.PatchSensor(cmd.Context(), req)
 	if err != nil {
 		return fmt.Errorf("failed to update sensor: %w", err)
 	}
 
-	// gRPC returns an error if it fails, so if we reach here it was a success.
-	fmt.Printf("Sensor '%s' updated successfully. Updated fields: %v\n", response.Sensor.Metadata.Id, updatePaths)
-
+	fmt.Printf("Sensor updated successfully. New Sensor data: %v\n", response.Sensor)
 	return nil
 }
