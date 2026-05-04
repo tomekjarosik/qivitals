@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // MemorySensorStorage implements SensorStorage using in-memory maps
@@ -47,14 +49,15 @@ func (m *MemorySensorStorage) Register(ctx context.Context, sensor *SensorInfo) 
 
 	m.sensors[sensor.ID] = &SensorState{
 		Info: &SensorInfo{
-			ID:             sensor.ID,
-			Name:           sensor.Name,
-			Namespace:      sensor.Namespace,
-			Description:    sensor.Description,
-			GracefulPeriod: sensor.GracefulPeriod,
-			FailurePeriod:  sensor.FailurePeriod,
-			Labels:         labels,
-			RegisteredAt:   now,
+			ID:              sensor.ID,
+			Name:            sensor.Name,
+			Namespace:       sensor.Namespace,
+			ResourceVersion: sensor.ResourceVersion,
+			Description:     sensor.Description,
+			GracefulPeriod:  sensor.GracefulPeriod,
+			FailurePeriod:   sensor.FailurePeriod,
+			Labels:          labels,
+			RegisteredAt:    now,
 		},
 		LastUpdated: now,
 		Metadata:    make(map[string]string),
@@ -64,13 +67,17 @@ func (m *MemorySensorStorage) Register(ctx context.Context, sensor *SensorInfo) 
 }
 
 // Update modifies an existing sensor by its unique ID
-func (m *MemorySensorStorage) Patch(ctx context.Context, sensorID string, updates *SensorInfo, columns []string) error {
+func (m *MemorySensorStorage) Patch(ctx context.Context, sensorID string, expectedVersion string, updates *SensorInfo, columns []string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	state, exists := m.sensors[sensorID]
 	if !exists {
 		return ErrSensorNotFound
+	}
+
+	if expectedVersion != state.Info.ResourceVersion {
+		return ErrVersionMismatch
 	}
 
 	for _, field := range columns {
@@ -95,6 +102,7 @@ func (m *MemorySensorStorage) Patch(ctx context.Context, sensorID string, update
 	}
 
 	state.LastUpdated = time.Now().Unix()
+	state.Info.ResourceVersion = uuid.New().String()
 	return nil
 }
 

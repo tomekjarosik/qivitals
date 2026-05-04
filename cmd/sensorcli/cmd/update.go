@@ -68,17 +68,18 @@ func runUpdate(cmd *cobra.Command, sensorID, namespace, sensorName, newName, new
 	}
 	defer conn.Close()
 
-	// 1. Resolve the ID if a Natural Key was provided
-	if sensorID == "" {
-		queryResp, err := client.QuerySensors(cmd.Context(), &v1.QuerySensorsRequest{
-			Namespace: namespace,
-			Name:      sensorName,
-		})
-		if err != nil || len(queryResp.Sensors) == 0 {
-			return fmt.Errorf("sensor '%s/%s' not found", namespace, sensorName)
-		}
-		sensorID = queryResp.Sensors[0].Metadata.Id
+	queryReq := &v1.QuerySensorsRequest{}
+	if sensorID != "" {
+		queryReq.Id = sensorID
+	} else {
+		queryReq.Namespace = namespace
+		queryReq.Name = sensorName
 	}
+	queryResp, err := client.QuerySensors(cmd.Context(), queryReq)
+	if err != nil || len(queryResp.Sensors) == 0 {
+		return fmt.Errorf("sensor '%s/%s' not found", namespace, sensorName)
+	}
+	originalSensorData := queryResp.Sensors[0]
 
 	var patches []*v1.PatchOperation
 
@@ -138,7 +139,8 @@ func runUpdate(cmd *cobra.Command, sensorID, namespace, sensorName, newName, new
 	}
 
 	req := &v1.PatchSensorRequest{
-		Id:         sensorID,
+		Id:         originalSensorData.Metadata.Id,
+		Version:    originalSensorData.Metadata.ResourceVersion,
 		Operations: patches,
 	}
 

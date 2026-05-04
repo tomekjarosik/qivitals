@@ -111,7 +111,7 @@ func (s *StatusMonitorService) PatchSensor(
 
 	// 7. Persist only the touched columns
 	columns := mapKeys(touchedColumns)
-	if err := s.storage.Patch(ctx, req.GetId(), updated, columns); err != nil {
+	if err := s.storage.Patch(ctx, req.GetId(), req.GetVersion(), updated, columns); err != nil {
 		return nil, err
 	}
 

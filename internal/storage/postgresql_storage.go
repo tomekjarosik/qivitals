@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/Masterminds/squirrel"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -33,6 +34,7 @@ func (p *PostgresSensorStorage) InitSchema(ctx context.Context) error {
 		id VARCHAR(255) PRIMARY KEY,
 		namespace VARCHAR(255) NOT NULL,
 		name VARCHAR(255) NOT NULL,
+        resource_version VARCHAR(255) NOT NULL,
 		description TEXT,
 		graceful_period BIGINT NOT NULL,
 		failure_period BIGINT NOT NULL,
@@ -55,8 +57,8 @@ func (p *PostgresSensorStorage) Register(ctx context.Context, sensor *SensorInfo
 	}
 
 	query, args, err := p.sq.Insert("sensors").
-		Columns("id", "namespace", "name", "description", "graceful_period", "failure_period", "labels", "registered_at", "last_updated", "metadata").
-		Values(sensor.ID, sensor.Namespace, sensor.Name, sensor.Description, sensor.GracefulPeriod, sensor.FailurePeriod, labelsJSON, sensor.RegisteredAt, sensor.RegisteredAt, "{}").
+		Columns("id", "namespace", "name", "resource_version", "description", "graceful_period", "failure_period", "labels", "registered_at", "last_updated", "metadata").
+		Values(sensor.ID, sensor.Namespace, sensor.Name, uuid.New().String(), sensor.Description, sensor.GracefulPeriod, sensor.FailurePeriod, labelsJSON, sensor.RegisteredAt, sensor.RegisteredAt, "{}").
 		ToSql()
 	if err != nil {
 		return err
@@ -75,11 +77,17 @@ func (p *PostgresSensorStorage) Register(ctx context.Context, sensor *SensorInfo
 	return nil
 }
 
-func (p *PostgresSensorStorage) Patch(ctx context.Context, sensorID string, updates *SensorInfo, columns []string) error {
+func (p *PostgresSensorStorage) checkExists(ctx context.Context, id string) (bool, error) {
+	var exists bool
+	err := p.pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM sensors WHERE id=$1)", id).Scan(&exists)
+	return exists, err
+}
+
+func (p *PostgresSensorStorage) Patch(ctx context.Context, sensorID string, expectedVersion string, updates *SensorInfo, columns []string) error {
 	if len(columns) == 0 {
 		return nil // Nothing to update!
 	}
-	builder := p.sq.Update("sensors").Where(squirrel.Eq{"id": sensorID})
+	builder := p.sq.Update("sensors").Where(squirrel.Eq{"id": sensorID, "resource_version": expectedVersion})
 
 	for _, column := range columns {
 		switch column {
@@ -99,6 +107,9 @@ func (p *PostgresSensorStorage) Patch(ctx context.Context, sensorID string, upda
 		}
 	}
 
+	// We use a raw expression to increment a version counter or rotate a UUID
+	builder = builder.Set("resource_version", squirrel.Expr("resource_version || '_' || substring(md5(random()::text), 1, 8)"))
+
 	query, args, err := builder.ToSql()
 	if err != nil {
 		return err
@@ -109,7 +120,14 @@ func (p *PostgresSensorStorage) Patch(ctx context.Context, sensorID string, upda
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return ErrSensorNotFound
+		exists, err := p.checkExists(ctx, sensorID)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return ErrSensorNotFound
+		}
+		return ErrVersionMismatch
 	}
 
 	return nil
@@ -167,7 +185,7 @@ func (p *PostgresSensorStorage) Delete(ctx context.Context, sensorID string) err
 }
 
 func (p *PostgresSensorStorage) Query(ctx context.Context, filter QueryFilter) ([]*SensorState, error) {
-	builder := p.sq.Select("id", "namespace", "name", "description", "graceful_period", "failure_period", "labels", "registered_at", "last_updated", "metadata").From("sensors")
+	builder := p.sq.Select("id", "namespace", "name", "resource_version", "description", "graceful_period", "failure_period", "labels", "registered_at", "last_updated", "metadata").From("sensors")
 
 	if filter.ID != "" {
 		builder = builder.Where(squirrel.Eq{"id": filter.ID})
@@ -228,7 +246,7 @@ func (p *PostgresSensorStorage) Query(ctx context.Context, filter QueryFilter) (
 		var labelsBytes, metadataBytes []byte
 
 		err := rows.Scan(
-			&info.ID, &info.Namespace, &info.Name, &info.Description,
+			&info.ID, &info.Namespace, &info.Name, &info.ResourceVersion, &info.Description,
 			&info.GracefulPeriod, &info.FailurePeriod, &labelsBytes, &info.RegisteredAt,
 			&state.LastUpdated, &metadataBytes,
 		)

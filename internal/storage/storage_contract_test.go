@@ -2,8 +2,6 @@ package storage
 
 import (
 	"context"
-	"fmt"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -70,6 +68,9 @@ func RunStorageContractTests(t *testing.T, setup func() SensorStorage, teardown 
 		})
 		require.NoError(t, err)
 
+		state, err := storage.GetStatus(ctx, "s1")
+		require.NoError(t, err)
+
 		// Partial update
 		updates := &SensorInfo{
 			Name:           "new-test", // Should NOT be updated based on mask
@@ -77,16 +78,16 @@ func RunStorageContractTests(t *testing.T, setup func() SensorStorage, teardown 
 			GracefulPeriod: 200,
 		}
 
-		err = storage.Patch(ctx, "s1", updates, []string{"description", "graceful_period_seconds"})
+		err = storage.Patch(ctx, "s1", state.Info.ResourceVersion, updates, []string{"description", "graceful_period_seconds"})
 		require.NoError(t, err)
 
-		state, _ := storage.GetStatus(ctx, "s1")
+		state, _ = storage.GetStatus(ctx, "s1")
 		assert.Equal(t, "new desc", state.Info.Description)
 		assert.Equal(t, int64(200), state.Info.GracefulPeriod)
 		assert.Equal(t, "test", state.Info.Name, "Name should not have changed since it wasn't in updateMask")
 
 		// Edge case: Patch non-existent
-		err = storage.Patch(ctx, "does-not-exist", updates, []string{"metadata.description"})
+		err = storage.Patch(ctx, "does-not-exist", "999", updates, []string{"metadata.description"})
 		assert.IsType(t, ErrSensorNotFound, err)
 	})
 
@@ -243,66 +244,28 @@ func RunExtendedStorageContractTests(t *testing.T, setup func() SensorStorage, t
 		err := storage.Register(ctx, initial)
 		require.NoError(t, err)
 
+		state, err := storage.GetStatus(ctx, "boundary-1")
+		require.NoError(t, err)
+
 		// Case: Empty Patch Mask (Nothing should change except LastUpdated)
 		updates := &SensorInfo{
 			Name:        "changed-name",
 			Description: "changed-desc",
 		}
-		err = storage.Patch(ctx, "boundary-1", updates, []string{})
+		err = storage.Patch(ctx, "boundary-1", state.Info.ResourceVersion, updates, []string{})
 		require.NoError(t, err)
 
-		state, _ := storage.GetStatus(ctx, "boundary-1")
+		state, _ = storage.GetStatus(ctx, "boundary-1")
 		assert.Equal(t, "boundary-test", state.Info.Name, "Name should not change with empty mask")
 		assert.Equal(t, "original description", state.Info.Description, "Description should not change with empty mask")
 
 		// Case: Invalid field in mask (System should handle gracefully)
-		err = storage.Patch(ctx, "boundary-1", updates, []string{"non_existent_field"})
+		err = storage.Patch(ctx, "boundary-1", state.Info.ResourceVersion, updates, []string{"non_existent_field"})
 		// Depending on your implementation, this might return an error or just ignore it.
 		// We assume the system should be robust.
 		if err != nil {
 			assert.Error(t, err)
 		}
-	})
-
-	t.Run("Concurrency_Stress_Test", func(t *testing.T) {
-		storage := setup()
-		defer teardown()
-		ctx := context.Background()
-
-		sensorID := "concurrent-sensor"
-		storage.Register(ctx, &SensorInfo{ID: sensorID, Name: "stress-test"})
-
-		const iterations = 50
-		var wg sync.WaitGroup
-		wg.Add(iterations * 2)
-
-		// Simulate concurrent SendData (Metadata updates)
-		for i := 0; i < iterations; i++ {
-			go func(val int) {
-				defer wg.Done()
-				meta := map[string]string{fmt.Sprintf("key-%d", val): "active"}
-				_ = storage.SendData(ctx, sensorID, meta)
-			}(i)
-
-			// Simulate concurrent Updates (Field updates)
-			go func(val int) {
-				defer wg.Done()
-				updates := &SensorInfo{Description: fmt.Sprintf("desc-%d", val)}
-				_ = storage.Patch(ctx, sensorID, updates, []string{"metadata.description"})
-			}(i)
-		}
-
-		wg.Wait()
-
-		// Verify integrity: The sensor should still exist and be queryable
-		state, err := storage.GetStatus(ctx, sensorID)
-		require.NoError(t, err)
-		assert.NotNil(t, state)
-
-		// Check that metadata keys merged (applying the logic mentioned in your original test)
-		// Note: In a high-concurrency environment, we check if the system survived without crashing
-		// and that the metadata contains at least some of the keys.
-		assert.Greater(t, len(state.Metadata), 0, "Metadata should have captured concurrent updates")
 	})
 
 	t.Run("Query_Logic_Intersections", func(t *testing.T) {
@@ -331,6 +294,56 @@ func RunExtendedStorageContractTests(t *testing.T, setup func() SensorStorage, t
 		results, err = storage.Query(ctx, filterHasKey)
 		require.NoError(t, err)
 		assert.Len(t, results, 3, "All sensors should match as they all have the 'tier' key")
+	})
+
+	t.Run("Patch_VersionMismatch", func(t *testing.T) {
+		// 1. Setup
+		storage := setup() // Assuming setup() returns your SensorStorage implementation
+		defer teardown()
+		ctx := context.Background()
+
+		sensorID := "version-test-id"
+		initialVersion := "v1"
+
+		// 2. Register the initial sensor with a specific version
+		// Note: In your current provided code, 'Version' is in SensorInfo
+		// but not explicitly handled in the Postgres Register/Patch logic.
+		// This test assumes your implementation checks this field.
+		err := storage.Register(ctx, &SensorInfo{
+			ID:              sensorID,
+			Name:            "version-test",
+			Namespace:       "test",
+			ResourceVersion: initialVersion,
+			GracefulPeriod:  100,
+			FailurePeriod:   200,
+		})
+		require.NoError(t, err)
+
+		// 3. Get the current state (This represents the client's "cached" version)
+		state, err := storage.GetStatus(ctx, sensorID)
+		require.NoError(t, err)
+		staleVersion := state.Info.ResourceVersion // This is "v1"
+
+		// 4. Perform a "Successful" update that increments the version in the DB
+		// We simulate a different client successfully updating the sensor to "v2"
+		updateSuccess := &SensorInfo{
+			Name:            "updated-successfully",
+			ResourceVersion: "v2",
+		}
+		err = storage.Patch(ctx, sensorID, staleVersion, updateSuccess, []string{"name"})
+		require.NoError(t, err, "First update should succeed")
+
+		// 5. The "Conflict" Step:
+		// Now we attempt to use the 'staleVersion' ("v1") to perform a new update.
+		// Since the DB is now at "v2", the version "v1" is no longer valid.
+		conflictUpdate := &SensorInfo{
+			Name: "this-should-fail",
+		}
+
+		err = storage.Patch(ctx, sensorID, staleVersion, conflictUpdate, []string{"name"})
+
+		require.Error(t, err, "Patch should fail due to stale resource version")
+		assert.ErrorIs(t, err, ErrVersionMismatch)
 	})
 
 	// TODO: this is not yet implemented

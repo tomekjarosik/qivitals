@@ -29,13 +29,14 @@ func (s *StatusMonitorService) RegisterSensor(ctx context.Context, req *v1.Regis
 	}
 
 	sensorInfo := &storage.SensorInfo{
-		ID:             req.Sensor.Metadata.Id,
-		Name:           req.Sensor.Metadata.Name,
-		Namespace:      req.Sensor.Metadata.Namespace,
-		Description:    req.Sensor.Metadata.Description,
-		GracefulPeriod: req.Sensor.Spec.GracefulPeriodSeconds,
-		FailurePeriod:  req.Sensor.Spec.FailurePeriodSeconds,
-		Labels:         req.Sensor.Metadata.Labels, // Maps directly now!
+		ID:              req.Sensor.Metadata.Id,
+		Name:            req.Sensor.Metadata.Name,
+		Namespace:       req.Sensor.Metadata.Namespace,
+		ResourceVersion: uuid.New().String(),
+		Description:     req.Sensor.Metadata.Description,
+		GracefulPeriod:  req.Sensor.Spec.GracefulPeriodSeconds,
+		FailurePeriod:   req.Sensor.Spec.FailurePeriodSeconds,
+		Labels:          req.Sensor.Metadata.Labels, // Maps directly now!
 	}
 
 	if sensorInfo.ID == "" {
@@ -150,11 +151,12 @@ func buildProtoSensor(state *storage.SensorState) *v1.Sensor {
 
 	return &v1.Sensor{
 		Metadata: &v1.ObjectMeta{
-			Id:          state.Info.ID,
-			Namespace:   state.Info.Namespace,
-			Name:        state.Info.Name,
-			Description: state.Info.Description,
-			Labels:      labels,
+			Id:              state.Info.ID,
+			Namespace:       state.Info.Namespace,
+			Name:            state.Info.Name,
+			ResourceVersion: state.Info.ResourceVersion,
+			Description:     state.Info.Description,
+			Labels:          labels,
 		},
 		Spec: &v1.SensorSpec{
 			GracefulPeriodSeconds: state.Info.GracefulPeriod,

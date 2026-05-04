@@ -55,7 +55,8 @@ message PatchOperation {
 
 message PatchSensorRequest {
   string id = 1;
-  repeated PatchOperation operations = 2;
+  string version = 2;
+  repeated PatchOperation operations = 3;
 }
 
 message PatchSensorResponse {

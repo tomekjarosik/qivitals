@@ -16,15 +16,15 @@ const (
 
 // SensorInfo contains all information about a registered sensor
 type SensorInfo struct {
-	ID             string
-	Name           string
-	Namespace      string
-	Description    string
-	GracefulPeriod int64
-	FailurePeriod  int64
-	Labels         map[string]string
-	RegisteredAt   int64
-	Version        string
+	ID              string
+	Name            string
+	Namespace       string
+	Description     string
+	GracefulPeriod  int64
+	FailurePeriod   int64
+	Labels          map[string]string
+	RegisteredAt    int64
+	ResourceVersion string
 }
 
 // SensorState tracks the current state of a sensor
@@ -53,6 +53,7 @@ type QueryFilter struct {
 
 var ErrSensorAlreadyExists = errors.New("sensor already exists")
 var ErrSensorNotFound = errors.New("sensor not found")
+var ErrVersionMismatch = errors.New("version mismatch")
 
 // SensorStorage defines the interface for sensor persistence
 type SensorStorage interface {
@@ -64,7 +65,7 @@ type SensorStorage interface {
 	Delete(ctx context.Context, sensorID string) error
 
 	// Patch modifies an existing sensor by its unique ID
-	Patch(ctx context.Context, sensorID string, updates *SensorInfo, columns []string) error
+	Patch(ctx context.Context, sensorID string, expectedVersion string, updates *SensorInfo, columns []string) error
 
 	// SendData processes a heartbeat/signal using the unique ID
 	SendData(ctx context.Context, sensorID string, metadata map[string]string) error

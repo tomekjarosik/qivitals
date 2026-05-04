@@ -573,6 +573,10 @@ func TestPatchSensor(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			state, err := impl.QuerySensors(ctx, &v1.QuerySensorsRequest{Id: initialSensor.Metadata.Id})
+			require.NoError(t, err)
+			tt.request.Version = state.Sensors[0].Metadata.ResourceVersion
+
 			resp, err := impl.PatchSensor(ctx, tt.request)
 
 			if tt.expectedError != codes.OK {
@@ -599,7 +603,11 @@ func TestPatchSensor(t *testing.T) {
 			require.NoError(t, err)
 
 			// We use the response's value as the ground truth for what was saved
+			assert.Equal(t, resp.Sensor.Metadata.Name, persistedState.Info.Name)
+			assert.Equal(t, resp.Sensor.Metadata.Namespace, persistedState.Info.Namespace)
 			assert.Equal(t, resp.Sensor.Metadata.Labels, persistedState.Info.Labels)
+			assert.Equal(t, resp.Sensor.Spec.GracefulPeriodSeconds, persistedState.Info.GracefulPeriod)
+			assert.Equal(t, resp.Sensor.Spec.FailurePeriodSeconds, persistedState.Info.FailurePeriod)
 		})
 	}
 }
