@@ -37,7 +37,7 @@ Examples:
 	cmd.Flags().StringVarP(&sensorID, "id", "i", "", "Optional unique sensor UUID (server generates if empty)")
 	cmd.Flags().StringVar(&namespace, "namespace", "default", "Logical grouping for the sensor")
 	cmd.Flags().StringVarP(&sensorName, "name", "n", "", "Human-readable sensor name (required)")
-	cmd.Flags().StringVar(&description, "desc", "", "Optional sensor description")
+	cmd.Flags().StringVar(&description, "description", "", "Optional sensor description")
 	cmd.Flags().Int64Var(&gracefulSeconds, "graceful", 300, "Seconds before showing DEGRADED status")
 	cmd.Flags().Int64Var(&failureSeconds, "failure", 900, "Seconds before showing DEAD status")
 	cmd.Flags().StringArrayVar(&labels, "label", []string{}, "Labels as key:value pairs (can be repeated)")

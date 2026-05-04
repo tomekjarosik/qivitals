@@ -254,8 +254,12 @@ func (p *PostgresSensorStorage) Query(ctx context.Context, filter QueryFilter) (
 			return nil, err
 		}
 
-		json.Unmarshal(labelsBytes, &info.Labels)
-		json.Unmarshal(metadataBytes, &state.Metadata)
+		if err = json.Unmarshal(labelsBytes, &info.Labels); err != nil {
+			return nil, err
+		}
+		if err = json.Unmarshal(metadataBytes, &state.Metadata); err != nil {
+			return nil, err
+		}
 		state.Info = &info
 		results = append(results, &state)
 	}

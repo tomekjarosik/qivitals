@@ -92,7 +92,7 @@ message QuerySensorsRequest {
   string id = 1;
   string namespace = 2;
   string name = 3;
-  string search = 4;
+  string search = 4; // searches inside name or description
 
   map<string, string> labels = 5;
   repeated string has_label_keys = 6;

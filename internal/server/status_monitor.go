@@ -133,7 +133,6 @@ func (s *StatusMonitorService) QuerySensors(ctx context.Context, req *v1.QuerySe
 
 		sensors = append(sensors, protoSensor)
 	}
-
 	return &v1.QuerySensorsResponse{
 		Sensors: sensors,
 	}, nil

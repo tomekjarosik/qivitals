@@ -1,212 +1,143 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>One Status · Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <meta http-equiv="refresh" content="30">
-    <style>
-        /* Tooltip stays the same */
-        .tooltip-content {
-            opacity: 0;
-            visibility: hidden;
-            transition: opacity 0.2s ease, visibility 0.2s ease;
-        }
-        .tooltip-trigger:hover .tooltip-content {
-            opacity: 1;
-            visibility: visible;
-        }
-    </style>
-</head>
-<body class="bg-gradient-to-br from-slate-50 to-indigo-50/50 min-h-screen font-sans antialiased text-slate-800">
+{{define "main"}}
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>One Status · Dashboard</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <script src="https://unpkg.com/htmx.org@1.9.11"></script>
+        <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.x.x/dist/cdn.min.js"></script>
+        <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+        <script>
+            document.body.addEventListener('htmx:beforeSwap', function(evt) {
+                if (evt.detail.target.id === 'sensor-grid-container') {
+                    // Check if the browser supports the transition API
+                    if (!document.startViewTransition) return;
 
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <!-- Header -->
-    <header class="flex flex-col sm:flex-row sm:items-end sm:justify-between mb-8">
-        <div>
-            <h1 class="text-4xl font-bold tracking-tight">
-                <span class="bg-gradient-to-r from-indigo-600 to-blue-500 bg-clip-text text-transparent">One Status</span>
-            </h1>
-            <p class="mt-1 text-sm text-slate-500">System health at a glance</p>
-        </div>
-        <div class="flex items-center gap-4 mt-4 sm:mt-0">
-            <span class="text-xs text-slate-500 bg-white/80 backdrop-blur px-3 py-1.5 rounded-full shadow-sm">
-                ⏱️ {{ .Now }}
-            </span>
-            <a href="/manage"
-               class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c..."/>
-                </svg>
-                Manage
-            </a>
-        </div>
-    </header>
+                    // Prevent the default HTMX swap so we can wrap it in the transition
+                    evt.preventDefault();
 
-    <!-- Filters -->
-    <form method="GET" action="/"
-          class="mb-10 rounded-2xl bg-white/90 backdrop-blur p-5 shadow-sm border border-slate-200/60">
-        <div class="flex flex-wrap items-end gap-4">
-            <div class="flex-1 min-w-[180px]">
-                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Namespace</label>
-                <input type="text" name="namespace" value="{{ .CurrentNamespace }}" placeholder="e.g. infra"
-                       class="w-full rounded-lg border-slate-300 text-sm p-2.5 focus:border-indigo-400 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 transition-shadow">
-            </div>
-            <div class="w-48">
-                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Status</label>
-                <select name="status"
-                        class="w-full rounded-lg border-slate-300 text-sm p-2.5 bg-white focus:border-indigo-400 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 transition-shadow">
-                    <option value="ALL" {{ if eq .CurrentStatus "ALL" }}selected{{ end }}>All</option>
-                    <option value="OK" {{ if eq .CurrentStatus "OK" }}selected{{ end }}>🟢 OK</option>
-                    <option value="DEGRADED" {{ if eq .CurrentStatus "DEGRADED" }}selected{{ end }}>🟡 Degraded</option>
-                    <option value="DEAD" {{ if eq .CurrentStatus "DEAD" }}selected{{ end }}>🔴 Dead</option>
-                </select>
-            </div>
-            <button type="submit"
-                    class="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition-colors">
-                Filter
-            </button>
-            <a href="/" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium py-2.5">
-                Clear
-            </a>
-        </div>
-    </form>
+                    const target = evt.detail.target;
+                    const oldContent = target.innerHTML;
 
-    <!-- Empty State -->
-    {{ if not .NamespaceGroups }}
-    <div class="rounded-2xl bg-white/90 backdrop-blur p-20 text-center shadow-sm border border-slate-200/60">
-        <svg class="mx-auto h-16 w-16 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                  d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-        </svg>
-        <h3 class="mt-4 text-lg font-medium text-slate-600">No sensors found</h3>
-        <p class="mt-2 text-sm text-slate-400">Try adjusting your filters or register a new sensor.</p>
-    </div>
-    {{ end }}
+                    // Execute the transition
+                    document.startViewTransition(async () => {
+                        // Manually perform the fetch and swap logic inside the transition
+                        const response = await fetch(target.getAttribute('hx-get'));
+                        const newHTML = await response.text();
+                        target.innerHTML = newHTML;
+                        formatTimestamps();
+                    });
+                }
+            });
+            document.body.addEventListener('htmx:afterSwap', function(evt) {
+                if (evt.detail.target.id === 'sensor-grid-container') {
+                    formatTimestamps();
+                }
+            });
 
-    <!-- Namespace Groups with Sensor Grid -->
-    {{ range .NamespaceGroups }}
-    <div class="mb-12">
-        <div class="flex items-center justify-between mb-4">
-            <div class="flex items-center gap-3">
-                <div class="h-2 w-2 rounded-full bg-indigo-500 shadow-sm shadow-indigo-300"></div>
-                <h2 class="text-xs font-bold uppercase tracking-widest text-indigo-700">
-                    {{ .Namespace }}
-                </h2>
-            </div>
-            <a href="/manage?namespace={{ .Namespace }}"
-               class="text-xs font-medium text-slate-500 hover:text-indigo-600 transition-colors flex items-center gap-1">
-                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                          d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                </svg>
-                Manage
-            </a>
-        </div>
-
-        <!-- Sensor Grid: 1 col on mobile, 2 on sm, 3 on md, 4 on xl -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-            {{ range .Sensors }}
-            <!-- Sensor Widget Card -->
-            <a href="/sensors/{{ .Metadata.Id }}"
-               class="group relative rounded-xl bg-white/90 backdrop-blur p-5 border border-slate-200/70 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all duration-200 cursor-pointer flex flex-col">
-
-                <!-- Status + Name Row -->
-                <div class="flex items-start justify-between mb-3">
-                    <div class="flex items-center gap-2">
-                        {{ if eq .Status.State "OK" }}
-                        <span class="h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-emerald-100"></span>
-                        <span class="text-sm font-semibold text-slate-800">{{ .Metadata.Name }}</span>
-                        {{ else if eq .Status.State "DEGRADED" }}
-                        <span class="h-2.5 w-2.5 rounded-full bg-amber-500 ring-2 ring-amber-100"></span>
-                        <span class="text-sm font-semibold text-slate-800">{{ .Metadata.Name }}</span>
-                        {{ else }}
-                        <span class="h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-rose-100"></span>
-                        <span class="text-sm font-semibold text-slate-800">{{ .Metadata.Name }}</span>
-                        {{ end }}
-                    </div>
-                    {{ if .Status.ReportedData }}
-                    <span class="tooltip-trigger relative cursor-help ml-auto">
-                        <svg class="h-4 w-4 text-slate-400 hover:text-indigo-500 transition-colors"
-                             fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <div class="tooltip-content absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 rounded-xl bg-slate-800 px-3 py-2.5 text-xs text-white shadow-xl z-20">
-                            <p class="font-semibold mb-1.5 text-indigo-300">Reported Data</p>
-                            {{ range $k, $v := .Status.ReportedData }}
-                            <div class="flex justify-between gap-2 py-0.5">
-                                <span class="text-slate-300">{{ $k }}</span>
-                                <span class="font-mono text-white">{{ $v }}</span>
-                            </div>
-                            {{ end }}
-                            <div class="absolute top-full left-1/2 -translate-x-1/2 -mt-0.5 w-3 h-3 rotate-45 bg-slate-800"></div>
-                        </div>
-                    </span>
-                    {{ end }}
-                </div>
-
-                <!-- Labels -->
-                <div class="flex flex-wrap gap-1.5 mb-3">
-                    {{ range $k, $v := .Metadata.Labels }}
-                    <span class="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-200/60">
-                        {{ $k }}:{{ $v }}
-                    </span>
-                    {{ else }}
-                    <span class="text-xs italic text-slate-400">—</span>
-                    {{ end }}
-                </div>
-
-                <!-- Footer: Heartbeat + Manual Actions -->
-                <div class="mt-auto flex items-end justify-between">
-                    <div class="text-xs text-slate-400">
-                        {{ if eq .Status.LastUpdatedTimestamp 0 }}
-                        <span class="italic">Never</span>
-                        {{ else }}
-                        <span class="format-timestamp whitespace-nowrap" data-ts="{{ .Status.LastUpdatedTimestamp }}">
-                            {{ .Status.LastUpdatedTimestamp }}
-                        </span>
-                        {{ end }}
-                    </div>
-
-                    <!-- Manual actions (stop click propagation) -->
-                    {{ if eq (index .Metadata.Labels "category") "manual" }}
-                    <div class="flex items-center gap-2" onclick="event.stopPropagation(); event.preventDefault();">
-                        <a href="/sensors/{{ .Metadata.Id }}/edit"
-                           class="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-sm">
-                            Edit
-                        </a>
-                        <form method="POST" action="/sensors/{{ .Metadata.Id }}/signal" class="inline" onclick="event.stopPropagation();">
-                            <button type="submit"
-                                    class="rounded-md bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100 transition-colors shadow-sm">
-                                ⚡ Signal
-                            </button>
-                        </form>
-                    </div>
-                    {{ end }}
-                </div>
-            </a>
-            {{ end }}
-        </div>
-    </div>
-    {{ end }}
-</div>
-
-<script>
-    // Format timestamps as before
-    document.addEventListener("DOMContentLoaded", function() {
-        document.querySelectorAll('.format-timestamp').forEach(el => {
-            const ts = parseInt(el.getAttribute('data-ts'), 10);
-            if (ts > 0) {
-                const date = new Date(ts * 1000);
-                el.textContent = date.toLocaleString(undefined, {
-                    month: 'short', day: 'numeric',
-                    hour: '2-digit', minute: '2-digit', second: '2-digit'
+            function formatTimestamps() {
+                document.querySelectorAll('.format-timestamp').forEach(el => {
+                    const ts = parseInt(el.getAttribute('data-ts'), 10);
+                    if (ts > 0) {
+                        const date = new Date(ts * 1000);
+                        el.textContent = date.toLocaleString(undefined, {
+                            month: 'short', day: 'numeric',
+                            hour: '2-digit', minute: '2-digit', second: '2-digit'
+                        });
+                    }
                 });
             }
-        });
-    });
-</script>
-</body>
-</html>
+        </script>
+        <style>
+            .tooltip-content {
+                opacity: 0;
+                visibility: hidden;
+                transition: opacity 0.2s ease, visibility 0.2s ease;
+            }
+            .tooltip-trigger:hover .tooltip-content {
+                opacity: 1;
+                visibility: visible;
+            }
+        </style>
+    </head>
+    <body class="bg-gradient-to-br from-slate-50 to-indigo-50/50 min-h-screen font-sans antialiased text-slate-800">
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <header class="flex flex-col sm:flex-row sm:items-end sm:justify-between mb-8">
+            <div>
+                <h1 class="text-4xl font-bold tracking-tight">
+                    <span class="bg-gradient-to-r from-indigo-600 to-blue-500 bg-clip-text text-transparent">One Status</span>
+                </h1>
+                <p class="mt-1 text-sm text-slate-500">System health at a glance</p>
+            </div>
+            <div class="flex items-center gap-4 mt-4 sm:mt-0">
+                <span class="text-xs text-slate-500 bg-white/80 backdrop-blur px-3 py-1.5 rounded-full shadow-sm">
+                    ⏱️ {{ .Now }}
+                </span>
+                <!-- Smaller Manage button -->
+                <a href="/manage"
+                   class="inline-flex items-center gap-1 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-indigo-700 transition-colors">
+                    <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c..."/>
+                    </svg>
+                    Manage
+                </a>
+            </div>
+        </header>
+
+        {{template "filter.html" .}}
+
+        <div id="sensor-grid-container"
+             hx-get="{{ .FullURL }}"
+             hx-trigger="every 5s"
+             hx-swap="innerHTML">
+            {{template "sensor-grid" .}}
+        </div>
+    </div>
+
+    </body>
+    </html>
+{{end}}
+
+
+{{define "sensor-grid"}}
+    {{ if not .NamespaceGroups }}
+        {{template "empty-state.html" .}}
+    {{ else }}
+        {{ range .NamespaceGroups }}
+        <div class="mb-12">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-3">
+                    <div class="h-2 w-2 rounded-full bg-indigo-500 shadow-sm shadow-indigo-300"></div>
+                    <h2 class="text-xs font-bold uppercase tracking-widest text-indigo-700">{{ .Namespace }}</h2>
+                </div>
+                <a href="/manage?namespace={{ .Namespace }}"
+                   class="text-xs font-medium text-slate-500 hover:text-indigo-600 transition-colors flex items-center gap-1">
+                    <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                    </svg>
+                    Manage
+                </a>
+            </div>
+
+            <!-- Namespace container with border and light background -->
+            <div class="rounded-xl border border-slate-200/80 bg-white/60 backdrop-blur p-5 shadow-sm">
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {{ range .Sensors }}
+                    {{template "sensor-card.html" .}}
+                    {{ end }}
+                </div>
+            </div>
+        </div>
+        {{ end }}
+    {{ end }}
+
+    <script>
+        // Just run the function immediately when this fragment is swapped in
+        if (typeof formatTimestamps === "function") {
+            formatTimestamps();
+        }
+    </script>
+{{end}}
