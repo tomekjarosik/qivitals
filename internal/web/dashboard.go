@@ -31,10 +31,14 @@ func NewDashboardHandler(svc *server.StatusMonitorService) (*DashboardHandler, e
 	}, nil
 }
 
+type NamespaceGroup struct {
+	Namespace string
+	Sensors   []*v1.Sensor
+}
+
 type TemplateData struct {
-	Now     string
-	Sensors []*v1.Sensor
-	// Provide the current query params back to the template so the search box stays populated
+	Now              string
+	NamespaceGroups  []NamespaceGroup // Replaced Sensors []*v1.Sensor
 	CurrentNamespace string
 	CurrentStatus    string
 }
@@ -81,9 +85,23 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	groupsMap := make(map[string][]*v1.Sensor)
+	for _, s := range resp.Sensors {
+		ns := s.Metadata.Namespace
+		groupsMap[ns] = append(groupsMap[ns], s)
+	}
+
+	var groups []NamespaceGroup
+	for ns, sensors := range groupsMap {
+		groups = append(groups, NamespaceGroup{
+			Namespace: ns,
+			Sensors:   sensors,
+		})
+	}
+
 	data := TemplateData{
 		Now:              time.Now().Format("2006-01-02 15:04:05"),
-		Sensors:          resp.Sensors,
+		NamespaceGroups:  groups, // Pass the grouped data
 		CurrentNamespace: namespaceFilter,
 		CurrentStatus:    statusFilter,
 	}
