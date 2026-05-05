@@ -5,7 +5,7 @@
 {{- else if eq .Status.State "DEGRADED" }} bg-amber-50/90
 {{- else }} bg-rose-50/90{{ end }}">
 
-<!-- Status + Name Row (now includes description) -->
+<!-- Status + Name Row -->
 <div class="flex items-start justify-between mb-3">
     <div class="flex items-start gap-2 min-w-0">
         <!-- Status dot -->
@@ -52,14 +52,15 @@
     {{ end }}
 </div>
 
-<!-- Footer: only heartbeat -->
+<!-- Footer: relative time -->
 <div class="mt-auto text-xs text-slate-400">
     {{ if eq .Status.LastUpdatedTimestamp 0 }}
     <span class="italic">Never</span>
     {{ else }}
-    <span class="format-timestamp whitespace-nowrap" data-ts="{{ .Status.LastUpdatedTimestamp }}">
-            {{ .Status.LastUpdatedTimestamp }}
-        </span>
+    <span class="whitespace-nowrap"
+          title="{{ .Status.LastUpdatedTimestamp | printf "Unix: %d" }}">
+    {{ timeAgo .Status.LastUpdatedTimestamp }}
+    </span>
     {{ end }}
 </div>
 </a>

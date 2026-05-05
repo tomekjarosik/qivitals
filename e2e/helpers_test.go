@@ -2,7 +2,6 @@ package e2e
 
 import (
 	"bytes"
-	"fmt"
 	"net"
 	"os/exec"
 	"testing"
@@ -54,14 +53,14 @@ func runCLI(t *testing.T, args ...string) (stdout string, stderr string, err err
 
 // --- Human-Readable CLI Helpers ---
 
-func Register(t *testing.T, namespace, name, desc string, graceful, failure int64, labels ...string) string {
+func Register(t *testing.T, namespace, name, desc string, graceful, failure string, labels ...string) string {
 	args := []string{
 		"register",
 		"--namespace", namespace,
 		"--name", name,
-		"--desc", desc,
-		"--graceful", fmt.Sprint(graceful),
-		"--failure", fmt.Sprint(failure),
+		"--description", desc,
+		"--graceful", graceful,
+		"--failure", failure,
 	}
 	for _, l := range labels {
 		args = append(args, "--label", l)

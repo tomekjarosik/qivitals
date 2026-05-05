@@ -2,7 +2,10 @@ package cmd
 
 import (
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // parseLabels takes a slice of "key=value" strings from the CLI flags
@@ -33,4 +36,25 @@ func parseLabels(labelStrings []string) (map[string]string, error) {
 	}
 
 	return parsedLabels, nil
+}
+
+func ParseExtendedDuration(s string) (time.Duration, error) {
+	re := regexp.MustCompile(`^(\d+)([wd])$`)
+	matches := re.FindStringSubmatch(s)
+
+	if len(matches) == 3 {
+		value, _ := strconv.Atoi(matches[1])
+		unit := matches[2]
+
+		switch unit {
+		case "w":
+			// 1 week = 168 hours
+			s = fmt.Sprintf("%dh", value*168)
+		case "d":
+			// 1 day = 24 hours
+			s = fmt.Sprintf("%dh", value*24)
+		}
+	}
+
+	return time.ParseDuration(s)
 }

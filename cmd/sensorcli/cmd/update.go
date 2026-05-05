@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"fmt"
+	"math"
 	"strconv"
+	"time"
 
 	"github.com/spf13/cobra"
 	v1 "github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
@@ -10,16 +12,16 @@ import (
 
 func NewCmdUpdate() *cobra.Command {
 	var (
-		sensorID        string
-		namespace       string
-		sensorName      string
-		newName         string
-		newNamespace    string
-		description     string
-		gracefulSeconds int64
-		failureSeconds  int64
-		labelsToAdd     []string
-		labelsToRemove  []string
+		sensorID       string
+		namespace      string
+		sensorName     string
+		newName        string
+		newNamespace   string
+		description    string
+		graceful       string
+		failure        string
+		labelsToAdd    []string
+		labelsToRemove []string
 	)
 
 	cmd := &cobra.Command{
@@ -42,7 +44,15 @@ Examples:
 			if sensorID == "" && sensorName == "" {
 				return fmt.Errorf("must provide either --id or --name to identify the sensor to update")
 			}
-			return runUpdate(cmd, sensorID, namespace, sensorName, newName, newNamespace, description, gracefulSeconds, failureSeconds, labelsToAdd, labelsToRemove)
+			gracefulDuration, err := ParseExtendedDuration(graceful)
+			if err != nil {
+				return fmt.Errorf("invalid value for --graceful: %w", err)
+			}
+			failureDuration, err := ParseExtendedDuration(failure)
+			if err != nil {
+				return fmt.Errorf("invalid value for --failure: %w", err)
+			}
+			return runUpdate(cmd, sensorID, namespace, sensorName, newName, newNamespace, description, gracefulDuration, failureDuration, labelsToAdd, labelsToRemove)
 		},
 	}
 
@@ -52,16 +62,16 @@ Examples:
 
 	cmd.Flags().StringVar(&newName, "new-name", "", "Rename the sensor")
 	cmd.Flags().StringVar(&newNamespace, "new-namespace", "", "Move sensor to a new namespace")
-	cmd.Flags().StringVar(&description, "desc", "", "New sensor description")
-	cmd.Flags().Int64Var(&gracefulSeconds, "graceful", 0, "New graceful period in seconds")
-	cmd.Flags().Int64Var(&failureSeconds, "failure", 0, "New failure period in seconds")
+	cmd.Flags().StringVar(&description, "description", "", "New sensor description")
+	cmd.Flags().StringVarP(&graceful, "graceful", "g", "300s", "Duration before showing DEGRADED status")
+	cmd.Flags().StringVarP(&failure, "failure", "f", "900s", "Duration before showing DEAD status")
 	cmd.Flags().StringArrayVarP(&labelsToAdd, "label", "l", []string{}, "Labels to add/update as key:value")
 	cmd.Flags().StringArrayVar(&labelsToRemove, "remove-label", []string{}, "Label keys to remove")
 
 	return cmd
 }
 
-func runUpdate(cmd *cobra.Command, sensorID, namespace, sensorName, newName, newNamespace, description string, gracefulSeconds, failureSeconds int64, labelsToAdd, labelsToRemove []string) error {
+func runUpdate(cmd *cobra.Command, sensorID, namespace, sensorName, newName, newNamespace, description string, gracefulDuration, failureDuration time.Duration, labelsToAdd, labelsToRemove []string) error {
 	client, conn, err := NewStatusClient(cmd.Context())
 	if err != nil {
 		return fmt.Errorf("failed to connect to gRPC server: %w", err)
@@ -97,7 +107,7 @@ func runUpdate(cmd *cobra.Command, sensorID, namespace, sensorName, newName, new
 			Value: fmt.Sprintf("\"%s\"", newNamespace),
 		})
 	}
-	if cmd.Flags().Changed("desc") {
+	if cmd.Flags().Changed("description") {
 		patches = append(patches, &v1.PatchOperation{
 			Op:    "replace",
 			Path:  "/metadata/description",
@@ -109,14 +119,14 @@ func runUpdate(cmd *cobra.Command, sensorID, namespace, sensorName, newName, new
 		patches = append(patches, &v1.PatchOperation{
 			Op:    "replace",
 			Path:  "/spec/graceful_period_seconds",
-			Value: strconv.FormatInt(gracefulSeconds, 10),
+			Value: strconv.FormatInt(int64(math.Round(gracefulDuration.Seconds())), 10),
 		})
 	}
 	if cmd.Flags().Changed("failure") {
 		patches = append(patches, &v1.PatchOperation{
 			Op:    "replace",
 			Path:  "/spec/failure_period_seconds",
-			Value: strconv.FormatInt(failureSeconds, 10),
+			Value: strconv.FormatInt(int64(math.Round(failureDuration.Seconds())), 10),
 		})
 	}
 

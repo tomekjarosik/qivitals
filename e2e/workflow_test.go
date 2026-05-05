@@ -15,9 +15,8 @@ func TestWorkflow_MonthlyBills(t *testing.T) {
 	defer serverCmd.Process.Kill()
 
 	// 1. Setup: A sensor for a monthly water bill (graceful: 30 days, failure: 35 days)
-	days30 := int64(30 * 24 * 60 * 60)
-	days35 := int64(35 * 24 * 60 * 60)
-	waterBillID := Register(t, "home", "water-bill", "Monthly water utility bill", days30, days35, "category=bills", "type=manual")
+
+	waterBillID := Register(t, "home", "water-bill", "Monthly water utility bill", "30d", "35d", "category=bills", "type=manual")
 
 	// Action: Human clicks "I paid this" (sends a report)
 	Report(t, waterBillID, "paid_amount=45.50", "method=bank_transfer")
@@ -35,13 +34,13 @@ func TestWorkflow_ITInfrastructure(t *testing.T) {
 	defer serverCmd.Process.Kill()
 
 	// 1. Register TLS Certificate monitor (graceful: 60 days, failure: 90 days)
-	tlsID := Register(t, "infra", "tls-jarosik-online", "TLS cert for main domain", 60*24*3600, 90*24*3600)
+	tlsID := Register(t, "infra", "tls-jarosik-online", "TLS cert for main domain", "60d", "90d")
 
 	// 2. Register Backup Monitor (graceful: 25 hours, failure: 48 hours)
-	backupID := Register(t, "infra", "backup-proxmox-nextcloud", "Daily Nextcloud VM backup", 25*3600, 48*3600)
+	backupID := Register(t, "infra", "backup-proxmox-nextcloud", "Daily Nextcloud VM backup", "25h", "48h")
 
 	// 3. Register VM Alive Ping (graceful: 5 mins, failure: 15 mins)
-	vmPingID := Register(t, "infra", "ping-nextcloud-vm", "Nextcloud internal health endpoint", 300, 900)
+	vmPingID := Register(t, "infra", "ping-nextcloud-vm", "Nextcloud internal health endpoint", "300s", "900s")
 
 	// --- Simulate automated Cron Jobs running ---
 
@@ -65,7 +64,7 @@ func TestWorkflow_HomeNetwork(t *testing.T) {
 	defer serverCmd.Process.Kill()
 
 	// Router pings 8.8.8.8 every minute. Graceful=2 mins, Failure=5 mins
-	internetID := Register(t, "network", "isp-connection", "Internet connectivity check", 120, 300, "location=home")
+	internetID := Register(t, "network", "isp-connection", "Internet connectivity check", "120s", "300s", "location=home")
 
 	// Router sends OK
 	Report(t, internetID, "packet_loss=0%")
@@ -77,10 +76,10 @@ func TestWorkflow_FamilyChores(t *testing.T) {
 	defer serverCmd.Process.Kill()
 
 	// Dog needs feeding twice a day (grace: 14 hours)
-	dogID := Register(t, "chores", "feed-dog", "Feed the dog", 14*3600, 24*3600)
+	dogID := Register(t, "chores", "feed-dog", "Feed the dog", "14h", "24h")
 
 	// Plants need water every 3 days
-	plantsID := Register(t, "chores", "water-plants", "Water living room plants", 3*24*3600, 5*24*3600)
+	plantsID := Register(t, "chores", "water-plants", "Water living room plants", "3d", "5d")
 
 	// Kid presses NFC button next to dog bowl
 	Report(t, dogID, "feeder=timmy")
@@ -97,7 +96,7 @@ func TestWorkflow_TemporaryProject(t *testing.T) {
 	defer serverCmd.Process.Kill()
 
 	// 1. Create a sensor for a temporary build job
-	jobID := Register(t, "temp", "build-job-123", "Short-lived build job", 3600, 7200)
+	jobID := Register(t, "temp", "build-job-123", "Short-lived build job", "1h", "2h")
 
 	// 2. Job is active
 	Report(t, jobID, "progress=50%")
@@ -116,11 +115,11 @@ func TestWorkflow_AdvancedQueryFiltering(t *testing.T) {
 	defer serverCmd.Process.Kill()
 
 	// 1. Setup a diverse set of sensors across different namespaces and names
-	Register(t, "infra", "db-backup-us-east", "Postgres backup", 3600, 7200, "env=prod", "team=data", "critical=true")
-	Register(t, "infra", "db-backup-eu-west", "Postgres backup EU", 3600, 7200, "env=prod", "team=data", "critical=true")
-	Register(t, "app", "api-health", "API healthcheck", 60, 120, "env=prod", "team=backend")
-	Register(t, "app", "api-staging-health", "Staging API ping", 60, 120, "env=staging", "team=backend")
-	Register(t, "chores", "clean-backup-drives", "Manual cleanup of old tapes", 86400, 172800, "manual=true")
+	Register(t, "infra", "db-backup-us-east", "Postgres backup", "1h", "2h", "env=prod", "team=data", "critical=true")
+	Register(t, "infra", "db-backup-eu-west", "Postgres backup EU", "1h", "2h", "env=prod", "team=data", "critical=true")
+	Register(t, "app", "api-health", "API healthcheck", "60s", "120s", "env=prod", "team=backend")
+	Register(t, "app", "api-staging-health", "Staging API ping", "60s", "120s", "env=staging", "team=backend")
+	Register(t, "chores", "clean-backup-drives", "Manual cleanup of old tapes", "3d", "7d", "manual=true")
 
 	// Helper to extract names from a query response
 	getNames := func(resp *v1.QuerySensorsResponse) []string {
@@ -179,16 +178,14 @@ func TestWorkflow_Update_Success(t *testing.T) {
 	initialNamespace := "production"
 	initialName := "web-api"
 	initialDesc := "Primary API server"
-	initialGraceful := int64(3600) // 1 hour
-	initialFailure := int64(7200)  // 2 hours
 
-	sensorID := Register(t, initialNamespace, initialName, initialDesc, initialGraceful, initialFailure, "env=prod", "tier=backend")
+	sensorID := Register(t, initialNamespace, initialName, initialDesc, "1h", "2h", "env=prod", "tier=backend")
 
 	updateArgs := []string{
 		"update",
 		"--id", sensorID,
-		"--desc", "Updated API Description",
-		"--graceful", "1800",
+		"--description", "Updated API Description",
+		"--graceful", "1800s",
 	}
 
 	// We execute the CLI tool as a separate process

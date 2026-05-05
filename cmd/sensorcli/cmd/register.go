@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"fmt"
+	"math"
+	"time"
 
 	"github.com/spf13/cobra"
 	v1 "github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
@@ -9,13 +11,13 @@ import (
 
 func NewCmdRegister() *cobra.Command {
 	var (
-		sensorID        string
-		namespace       string
-		sensorName      string
-		description     string
-		gracefulSeconds int64
-		failureSeconds  int64
-		labels          []string
+		sensorID    string
+		namespace   string
+		sensorName  string
+		description string
+		graceful    string
+		failure     string
+		labels      []string
 	)
 
 	cmd := &cobra.Command{
@@ -30,7 +32,15 @@ Examples:
   sensorcli register --namespace db --name "Daily Backup" --label "env=production" --graceful 300 --failure 600
   sensorcli register -ns frontend -n "Payment-Service" -l "tier=1"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runRegister(cmd, args, sensorID, namespace, sensorName, description, gracefulSeconds, failureSeconds, labels)
+			gracefulDuration, err := ParseExtendedDuration(graceful)
+			if err != nil {
+				return fmt.Errorf("invalid value for --graceful: %w", err)
+			}
+			failureDuration, err := ParseExtendedDuration(failure)
+			if err != nil {
+				return fmt.Errorf("invalid value for --failure: %w", err)
+			}
+			return runRegister(cmd, args, sensorID, namespace, sensorName, description, gracefulDuration, failureDuration, labels)
 		},
 	}
 
@@ -38,8 +48,8 @@ Examples:
 	cmd.Flags().StringVar(&namespace, "namespace", "default", "Logical grouping for the sensor")
 	cmd.Flags().StringVarP(&sensorName, "name", "n", "", "Human-readable sensor name (required)")
 	cmd.Flags().StringVar(&description, "description", "", "Optional sensor description")
-	cmd.Flags().Int64Var(&gracefulSeconds, "graceful", 300, "Seconds before showing DEGRADED status")
-	cmd.Flags().Int64Var(&failureSeconds, "failure", 900, "Seconds before showing DEAD status")
+	cmd.Flags().StringVarP(&graceful, "graceful", "g", "300s", "Duration before showing DEGRADED status")
+	cmd.Flags().StringVarP(&failure, "failure", "f", "900s", "Duration before showing DEAD status")
 	cmd.Flags().StringArrayVar(&labels, "label", []string{}, "Labels as key:value pairs (can be repeated)")
 
 	cmd.MarkFlagRequired("name")
@@ -47,7 +57,7 @@ Examples:
 	return cmd
 }
 
-func runRegister(cmd *cobra.Command, _ []string, sensorID, namespace, sensorName, description string, gracefulSeconds, failureSeconds int64, labelStrings []string) error {
+func runRegister(cmd *cobra.Command, _ []string, sensorID, namespace, sensorName, description string, gracefulDuration, failureDuration time.Duration, labelStrings []string) error {
 	parsedLabels, err := parseLabels(labelStrings)
 	if err != nil {
 		return fmt.Errorf("failed to parse labels: %w", err)
@@ -70,8 +80,8 @@ func runRegister(cmd *cobra.Command, _ []string, sensorID, namespace, sensorName
 				Labels:      parsedLabels,
 			},
 			Spec: &v1.SensorSpec{
-				GracefulPeriodSeconds: gracefulSeconds,
-				FailurePeriodSeconds:  failureSeconds,
+				GracefulPeriodSeconds: int64(math.Round(gracefulDuration.Seconds())),
+				FailurePeriodSeconds:  int64(math.Round(failureDuration.Seconds())),
 			},
 		},
 	}

@@ -23,16 +23,14 @@ func TestWorkflow_Update_AllFlagsSeparately(t *testing.T) {
 	initialNamespace := "production"
 	initialName := "web-api"
 	initialDesc := "Original Description"
-	initialGraceful := int64(3600)
-	initialFailure := int64(7200)
 
 	// Register the baseline
-	sensorID := Register(t, initialNamespace, initialName, initialDesc, initialGraceful, initialFailure, "env=prod", "tier=backend")
+	sensorID := Register(t, initialNamespace, initialName, initialDesc, "3600s", "7200s", "env=prod", "tier=backend")
 
 	tests := []updateTestCase{
 		{
 			name: "Patch Description",
-			args: []string{"update", "--id", sensorID, "--desc", "New Description"},
+			args: []string{"update", "--id", sensorID, "--description", "New Description"},
 			verify: func(t *testing.T, s *v1.Sensor) {
 				assert.Equal(t, "New Description", s.Metadata.Description)
 			},
@@ -53,14 +51,14 @@ func TestWorkflow_Update_AllFlagsSeparately(t *testing.T) {
 		},
 		{
 			name: "Patch Graceful Period",
-			args: []string{"update", "--id", sensorID, "--graceful", "1800"},
+			args: []string{"update", "--id", sensorID, "--graceful", "1800s"},
 			verify: func(t *testing.T, s *v1.Sensor) {
 				assert.Equal(t, int64(1800), s.Spec.GracefulPeriodSeconds)
 			},
 		},
 		{
 			name: "Patch Failure Period",
-			args: []string{"update", "--id", sensorID, "--failure", "5000"},
+			args: []string{"update", "--id", sensorID, "--failure", "5000s"},
 			verify: func(t *testing.T, s *v1.Sensor) {
 				assert.Equal(t, int64(5000), s.Spec.FailurePeriodSeconds)
 			},
