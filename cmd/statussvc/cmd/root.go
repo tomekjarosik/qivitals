@@ -36,8 +36,7 @@ and automated endpoint monitoring, all stored in PostgreSQL and served via HTTP/
 	}
 
 	// Define the --verbose global flag
-	var verbose bool
-	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose output")
+	rootCmd.PersistentFlags().BoolVarP(&flagLocalDebug, "verbose", "v", false, "enable verbose output")
 
 	// Bind the verbose flag to Viper
 	viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
@@ -62,10 +61,4 @@ func Execute(rootCmd *cobra.Command) {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
-}
-
-// initConfig handles configuration loading (Placeholder)
-func initConfig() error {
-	viper.AutomaticEnv()
-	return nil
 }

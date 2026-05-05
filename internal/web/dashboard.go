@@ -13,18 +13,17 @@ import (
 	"time"
 
 	v1 "github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
-	"github.com/tomekjarosik/one-status/internal/server"
 )
 
 //go:embed templates/**
 var templateFS embed.FS
 
 type DashboardHandler struct {
-	svc  *server.StatusMonitorService
+	svc  v1.StatusServiceServer
 	tmpl *template.Template
 }
 
-func NewDashboardHandler(svc *server.StatusMonitorService) (*DashboardHandler, error) {
+func NewDashboardHandler(svc v1.StatusServiceServer) (*DashboardHandler, error) {
 	tmpl := template.New("").Funcs(templateFuncs())
 	tmpl, err := tmpl.ParseFS(templateFS,
 		"templates/index.html",
