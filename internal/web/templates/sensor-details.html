@@ -1,0 +1,160 @@
+{{define "sensor-details"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sensor · {{ .Sensor.Metadata.Name }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.11"></script>
+    <script>
+        function addLabelRow() {
+            const container = document.getElementById('labels-container');
+            const div = document.createElement('div');
+            div.className = 'flex gap-2 items-center';
+            div.innerHTML = `
+                <input type="text" name="label_key" placeholder="key"
+                       class="w-1/3 rounded-md border border-slate-300 px-2 py-1 text-sm">
+                <input type="text" name="label_value" placeholder="value"
+                       class="flex-1 rounded-md border border-slate-300 px-2 py-1 text-sm">
+                <button type="button" onclick="this.parentElement.remove()"
+                        class="text-rose-500 hover:text-rose-700 text-xs">✕</button>
+            `;
+            container.appendChild(div);
+        }
+    </script>
+</head>
+<body class="bg-gradient-to-br from-slate-50 to-indigo-50/50 min-h-screen font-sans antialiased text-slate-800">
+
+<div class="max-w-2xl mx-auto px-4 py-12">
+    <a href="/" class="text-sm text-indigo-600 hover:underline mb-8 inline-block">← Back to Dashboard</a>
+
+    <h1 class="text-3xl font-bold mb-8">Sensor Details</h1>
+
+    <form method="post" class="space-y-8">
+
+        <!-- Metadata -->
+        <section class="bg-white/90 backdrop-blur rounded-xl border border-slate-200/70 p-6 shadow-sm">
+            <h2 class="text-lg font-semibold text-slate-800 mb-4">Metadata</h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-600 mb-1">Name</label>
+                    <input name="name" value="{{ .Sensor.Metadata.Name }}" required
+                           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-600 mb-1">Description</label>
+                    <input name="description" value="{{ .Sensor.Metadata.Description }}"
+                           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-600 mb-1">Namespace</label>
+                    <input value="{{ .Sensor.Metadata.Namespace }}"
+                           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-slate-50"
+                           disabled>
+                    <p class="text-xs text-slate-400 mt-1">Namespace cannot be changed.</p>
+                </div>
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="text-sm font-medium text-slate-600">Labels</label>
+                        <button type="button" onclick="addLabelRow()"
+                                class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">
+                            + Add label
+                        </button>
+                    </div>
+                    <div id="labels-container" class="space-y-2">
+                        {{ range $k, $v := .Sensor.Metadata.Labels }}
+                        <div class="flex gap-2 items-center">
+                            <input type="text" name="label_key" value="{{ $k }}"
+                                   class="w-1/3 rounded-md border border-slate-300 px-2 py-1 text-sm">
+                            <input type="text" name="label_value" value="{{ $v }}"
+                                   class="flex-1 rounded-md border border-slate-300 px-2 py-1 text-sm">
+                            <button type="button" onclick="this.parentElement.remove()"
+                                    class="text-rose-500 hover:text-rose-700 text-xs">✕</button>
+                        </div>
+                        {{ end }}
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Spec (editable) -->
+        <section class="bg-white/90 backdrop-blur rounded-xl border border-slate-200/70 p-6 shadow-sm">
+            <h2 class="text-lg font-semibold text-slate-800 mb-4">Spec</h2>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-600 mb-1">Graceful Period (seconds)</label>
+                    <input type="number" name="graceful_period_seconds"
+                           value="{{ .Sensor.Spec.GracefulPeriodSeconds }}"
+                           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-600 mb-1">Failure Period (seconds)</label>
+                    <input type="number" name="failure_period_seconds"
+                           value="{{ .Sensor.Spec.FailurePeriodSeconds }}"
+                           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                </div>
+            </div>
+            <p class="text-xs text-slate-400 mt-2">These thresholds determine whether the sensor becomes DEGRADED or DEAD when no heartbeat is received.</p>
+        </section>
+
+        <!-- Status (read‑only) -->
+        <section class="bg-white/90 backdrop-blur rounded-xl border border-slate-200/70 p-6 shadow-sm">
+            <h2 class="text-lg font-semibold text-slate-800 mb-4">Current Status</h2>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <span class="block text-sm font-medium text-slate-600 mb-1">State</span>
+                    <span class="inline-flex items-center gap-1.5 text-sm font-semibold
+                        {{ if eq .Sensor.Status.State "OK" }} text-emerald-700
+                    {{ else if eq .Sensor.Status.State "DEGRADED" }} text-amber-700
+                    {{ else }} text-rose-700 {{ end }}">
+                    <span class="h-2.5 w-2.5 rounded-full
+                            {{ if eq .Sensor.Status.State "OK" }} bg-emerald-500
+                    {{ else if eq .Sensor.Status.State "DEGRADED" }} bg-amber-500
+                    {{ else }} bg-rose-500 {{ end }}"></span>
+                    {{ .Sensor.Status.State }}
+                    </span>
+                </div>
+                <div>
+                    <span class="block text-sm font-medium text-slate-600 mb-1">Last Updated</span>
+                    <span class="text-sm text-slate-800">
+                        {{ if .Sensor.Status.LastUpdatedTimestamp }}
+                            {{ timeAgo .Sensor.Status.LastUpdatedTimestamp }}
+                            <span class="text-xs text-slate-400">({{ .Sensor.Status.LastUpdatedTimestamp }})</span>
+                        {{ else }}
+                            Never
+                        {{ end }}
+                    </span>
+                </div>
+            </div>
+            {{ if .Sensor.Status.ReportedData }}
+            <div class="mt-4">
+                <span class="block text-sm font-medium text-slate-600 mb-2">Reported Data</span>
+                <div class="bg-slate-50 rounded-lg border border-slate-200 divide-y divide-slate-200">
+                    {{ range $k, $v := .Sensor.Status.ReportedData }}
+                    <div class="flex justify-between px-4 py-2 text-sm">
+                        <span class="text-slate-500">{{ $k }}</span>
+                        <span class="font-mono text-slate-800">{{ $v }}</span>
+                    </div>
+                    {{ end }}
+                </div>
+            </div>
+            {{ else }}
+            <p class="text-sm text-slate-400 mt-2">No reported data yet.</p>
+            {{ end }}
+        </section>
+
+        <!-- Actions -->
+        <div class="flex justify-end gap-4">
+            <a href="/" class="px-4 py-2 text-sm text-slate-600 hover:text-slate-800">Cancel</a>
+            <button type="submit"
+                    class="px-6 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
+                Save Changes
+            </button>
+        </div>
+    </form>
+</div>
+
+</body>
+</html>
+{{end}}

@@ -23,11 +23,16 @@ type DashboardHandler struct {
 	tmpl *template.Template
 }
 
+func (h *DashboardHandler) Template() *template.Template {
+	return h.tmpl
+}
+
 func NewDashboardHandler(svc v1.StatusServiceServer) (*DashboardHandler, error) {
 	tmpl := template.New("").Funcs(templateFuncs())
 	tmpl, err := tmpl.ParseFS(templateFS,
 		"templates/index.html",
 		"templates/components/*.html",
+		"templates/sensor-details.html",
 	)
 	if err != nil {
 		return nil, err

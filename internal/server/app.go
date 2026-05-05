@@ -21,17 +21,19 @@ import (
 
 // App represents the composed gRPC + HTTP gateway + Web UI application.
 type App struct {
-	config    Config
-	service   *StatusMonitorService // implements the gRPC service interface
-	dashboard *web.DashboardHandler
+	config        Config
+	service       *StatusMonitorService // implements the gRPC service interface
+	dashboard     *web.DashboardHandler
+	sensorDetails *web.SensorDetailsHandler
 }
 
 // NewApp creates a new application instance.
-func NewApp(cfg Config, svc *StatusMonitorService, dashboard *web.DashboardHandler) *App {
+func NewApp(cfg Config, svc *StatusMonitorService, dashboard *web.DashboardHandler, sensorDetails *web.SensorDetailsHandler) *App {
 	return &App{
-		config:    cfg,
-		service:   svc,
-		dashboard: dashboard,
+		config:        cfg,
+		service:       svc,
+		dashboard:     dashboard,
+		sensorDetails: sensorDetails,
 	}
 }
 
@@ -51,6 +53,7 @@ func (a *App) Run(ctx context.Context) error {
 	// Assemble HTTP mux: /api/* -> gateway, / -> dashboard
 	httpMux := http.NewServeMux()
 	httpMux.Handle("/api/", http.StripPrefix("/api", gatewayHandler))
+	httpMux.HandleFunc("/sensors/{id}", a.sensorDetails.ServeHTTP)
 	httpMux.HandleFunc("/", a.dashboard.ServeHTTP)
 
 	httpServer := &http.Server{
