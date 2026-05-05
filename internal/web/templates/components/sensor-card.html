@@ -1,24 +1,27 @@
 {{define "sensor-card.html"}}
 <a href="/sensors/{{ .Metadata.Id }}"
-   class="group relative rounded-xl bg-white/90 backdrop-blur p-5 border border-slate-200/70 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all duration-200 cursor-pointer flex flex-col">
+   class="group relative rounded-xl p-5 border border-slate-200/70 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all duration-200 cursor-pointer flex flex-col backdrop-blur
+   {{- if eq .Status.State "OK" }} bg-emerald-50/90
+{{- else if eq .Status.State "DEGRADED" }} bg-amber-50/90
+{{- else }} bg-rose-50/90{{ end }}">
 
-    <!-- Status + Name Row (now includes description) -->
-    <div class="flex items-start justify-between mb-3">
-        <div class="flex items-start gap-2 min-w-0">
-            <!-- Status dot -->
-            <span class="mt-0.5 h-2.5 w-2.5 rounded-full flex-shrink-0 ring-2
+<!-- Status + Name Row (now includes description) -->
+<div class="flex items-start justify-between mb-3">
+    <div class="flex items-start gap-2 min-w-0">
+        <!-- Status dot -->
+        <span class="mt-0.5 h-2.5 w-2.5 rounded-full flex-shrink-0 ring-2
                 {{ if eq .Status.State "OK" }} bg-emerald-500 ring-emerald-100
-            {{ else if eq .Status.State "DEGRADED" }} bg-amber-500 ring-amber-100
-            {{ else }} bg-rose-500 ring-rose-100 {{ end }}"></span>
-            <div class="min-w-0">
-                <span class="text-sm font-semibold text-slate-800 block">{{ .Metadata.Name }}</span>
-                {{ if .Metadata.Description }}
-                <p class="text-xs text-slate-500 truncate mt-0.5" title="{{ .Metadata.Description }}">{{ .Metadata.Description }}</p>
-                {{ end }}
-            </div>
+        {{ else if eq .Status.State "DEGRADED" }} bg-amber-500 ring-amber-100
+        {{ else }} bg-rose-500 ring-rose-100 {{ end }}"></span>
+        <div class="min-w-0">
+            <span class="text-sm font-semibold text-slate-800 block">{{ .Metadata.Name }}</span>
+            {{ if .Metadata.Description }}
+            <p class="text-xs text-slate-500 truncate mt-0.5" title="{{ .Metadata.Description }}">{{ .Metadata.Description }}</p>
+            {{ end }}
         </div>
-        {{ if .Status.ReportedData }}
-        <span class="tooltip-trigger relative cursor-help ml-2 flex-shrink-0">
+    </div>
+    {{ if .Status.ReportedData }}
+    <span class="tooltip-trigger relative cursor-help ml-2 flex-shrink-0">
             <svg class="h-4 w-4 text-slate-400 hover:text-indigo-500 transition-colors"
                  fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -35,29 +38,29 @@
                 <div class="absolute top-full left-1/2 -translate-x-1/2 -mt-0.5 w-3 h-3 rotate-45 bg-slate-800"></div>
             </div>
         </span>
-        {{ end }}
-    </div>
+    {{ end }}
+</div>
 
-    <!-- Labels -->
-    <div class="flex flex-wrap gap-1.5 mb-3">
-        {{ range $k, $v := .Metadata.Labels }}
-        <span class="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-200/60">
+<!-- Labels -->
+<div class="flex flex-wrap gap-1.5 mb-3">
+    {{ range $k, $v := .Metadata.Labels }}
+    <span class="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-200/60">
             {{ $k }}:{{ $v }}
         </span>
-        {{ else }}
-        <span class="text-xs italic text-slate-400">—</span>
-        {{ end }}
-    </div>
+    {{ else }}
+    <span class="text-xs italic text-slate-400">—</span>
+    {{ end }}
+</div>
 
-    <!-- Footer: only heartbeat -->
-    <div class="mt-auto text-xs text-slate-400">
-        {{ if eq .Status.LastUpdatedTimestamp 0 }}
-        <span class="italic">Never</span>
-        {{ else }}
-        <span class="format-timestamp whitespace-nowrap" data-ts="{{ .Status.LastUpdatedTimestamp }}">
+<!-- Footer: only heartbeat -->
+<div class="mt-auto text-xs text-slate-400">
+    {{ if eq .Status.LastUpdatedTimestamp 0 }}
+    <span class="italic">Never</span>
+    {{ else }}
+    <span class="format-timestamp whitespace-nowrap" data-ts="{{ .Status.LastUpdatedTimestamp }}">
             {{ .Status.LastUpdatedTimestamp }}
         </span>
-        {{ end }}
-    </div>
+    {{ end }}
+</div>
 </a>
 {{end}}
