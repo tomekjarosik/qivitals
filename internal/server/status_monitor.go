@@ -27,7 +27,7 @@ func (s *StatusMonitorService) RegisterSensor(ctx context.Context, req *v1.Regis
 	if req.Sensor == nil || req.Sensor.Metadata == nil || req.Sensor.Spec == nil {
 		return nil, errors.New("sensor metadata and spec are required")
 	}
-
+	now := time.Now().Unix()
 	sensorInfo := &storage.SensorInfo{
 		ID:              req.Sensor.Metadata.Id,
 		Name:            req.Sensor.Metadata.Name,
@@ -37,6 +37,7 @@ func (s *StatusMonitorService) RegisterSensor(ctx context.Context, req *v1.Regis
 		GracefulPeriod:  req.Sensor.Spec.GracefulPeriodSeconds,
 		FailurePeriod:   req.Sensor.Spec.FailurePeriodSeconds,
 		Labels:          req.Sensor.Metadata.Labels, // Maps directly now!
+		RegisteredAt:    now,
 	}
 
 	if sensorInfo.ID == "" {

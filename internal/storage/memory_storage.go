@@ -39,8 +39,6 @@ func (m *MemorySensorStorage) Register(ctx context.Context, sensor *SensorInfo) 
 		}
 	}
 
-	now := time.Now().Unix()
-
 	// Deep copy labels
 	labels := make(map[string]string)
 	for k, v := range sensor.Labels {
@@ -57,9 +55,9 @@ func (m *MemorySensorStorage) Register(ctx context.Context, sensor *SensorInfo) 
 			GracefulPeriod:  sensor.GracefulPeriod,
 			FailurePeriod:   sensor.FailurePeriod,
 			Labels:          labels,
-			RegisteredAt:    now,
+			RegisteredAt:    sensor.RegisteredAt,
 		},
-		LastUpdated: now,
+		LastUpdated: sensor.RegisteredAt,
 		Metadata:    make(map[string]string),
 	}
 
