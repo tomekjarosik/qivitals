@@ -1,0 +1,8 @@
+{{define "reported-data"}}
+{{range $k, $v := .Data}}
+<div class="flex justify-between gap-2 py-0.5">
+    <span class="text-slate-300">{{$k}}</span>
+    <span class="font-mono text-white">{{$v}}</span>
+</div>
+{{end}}
+{{end}}

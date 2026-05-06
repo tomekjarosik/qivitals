@@ -1,0 +1,154 @@
+package web
+
+import (
+	"bytes"
+	"embed"
+	"log"
+	"net/http"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	v1 "github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
+	"github.com/tomekjarosik/one-status/internal/view"
+	"github.com/tomekjarosik/one-status/internal/view/components"
+)
+
+//go:embed templates/**
+var TemplateFS embed.FS
+
+type DashboardHandler struct {
+	svc v1.StatusServiceServer
+}
+
+func NewDashboardHandler(svc v1.StatusServiceServer) *DashboardHandler {
+	return &DashboardHandler{svc: svc}
+}
+
+func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	statuses := q["statuses"]
+
+	// Build label entries
+	var labels []view.LabelEntry
+	for key, vals := range q {
+		if strings.HasPrefix(key, "labels[") && strings.HasSuffix(key, "]") {
+			k := key[7 : len(key)-1]
+			if k != "" && len(vals) > 0 {
+				labels = append(labels, view.LabelEntry{Key: k, Value: vals[0]})
+			}
+		}
+	}
+
+	hasLabelKeysStr := q.Get("has_label_keys")
+	var hasLabelKeys []string
+	if hasLabelKeysStr != "" {
+		hasLabelKeys = strings.Split(hasLabelKeysStr, ",")
+	}
+	orderDesc, _ := strconv.ParseBool(q.Get("order_desc"))
+
+	req := &v1.QuerySensorsRequest{
+		Namespace:    q.Get("namespace"),
+		Name:         q.Get("name"),
+		Search:       q.Get("search"),
+		Statuses:     statuses,
+		Labels:       toMap(labels),
+		HasLabelKeys: hasLabelKeys,
+		OrderBy:      q.Get("order_by"),
+		OrderDesc:    orderDesc,
+	}
+
+	resp, err := h.svc.QuerySensors(r.Context(), req)
+	if err != nil {
+		http.Error(w, "Failed to load sensors", http.StatusInternalServerError)
+		return
+	}
+
+	// Convert proto → view models
+	groupsMap := map[string][]view.SensorCardView{}
+	for _, s := range resp.Sensors {
+		ns := s.Metadata.Namespace
+		card := sensorToCardView(s)
+		groupsMap[ns] = append(groupsMap[ns], card)
+	}
+
+	var groups []view.NamespaceGroupView
+	for ns, cards := range groupsMap {
+		sort.Slice(cards, func(i, j int) bool { return cards[i].Name < cards[j].Name })
+		groups = append(groups, view.NamespaceGroupView{
+			Namespace: ns,
+			Sensors:   cards,
+		})
+	}
+	sort.Slice(groups, func(i, j int) bool { return groups[i].Namespace < groups[j].Namespace })
+
+	filter := view.FilterView{
+		Namespace:    q.Get("namespace"),
+		Search:       q.Get("search"),
+		Name:         q.Get("name"),
+		Statuses:     statuses,
+		Labels:       labels,
+		HasLabelKeys: hasLabelKeysStr,
+		OrderBy:      q.Get("order_by"),
+		OrderDesc:    orderDesc,
+	}
+
+	empty := view.NewDefaultEmptyState()
+	sensorGridData := view.SensorGridData{
+		Groups: groups,
+		Empty:  empty,
+	}
+
+	pageData := view.DashboardPageView{
+		Now:        time.Now().Format("2006-01-02 15:04:05"),
+		FullURL:    r.URL.RequestURI(),
+		SensorGrid: sensorGridData, // <-- now a single field
+		Filter:     filter,
+	}
+
+	isHTMX := r.Header.Get("HX-Request") == "true"
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	var buf bytes.Buffer
+	if isHTMX {
+		gridComp := components.NewSensorGrid(pageData.SensorGrid)
+		if err := gridComp.Render(r.Context(), &buf); err != nil {
+			log.Printf("Render error: %v", err)
+			http.Error(w, "Render error", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		comp := components.NewDashboardPage(pageData)
+		if err := comp.Render(r.Context(), &buf); err != nil {
+			log.Printf("Render error: %v", err)
+			http.Error(w, "Render error", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	buf.WriteTo(w)
+}
+
+func sensorToCardView(s *v1.Sensor) view.SensorCardView {
+	return view.SensorCardView{
+		ID:          s.Metadata.Id,
+		Name:        s.Metadata.Name,
+		Description: s.Metadata.Description,
+		Status: view.StatusBadgeView{
+			State:   s.Status.State,
+			ShowDot: true,
+		},
+		Labels:       view.LabelPillsView{Labels: s.Metadata.Labels},
+		ReportedData: view.ReportedDataView{Data: s.Status.ReportedData},
+		LastUpdated:  s.Status.LastUpdatedTimestamp,
+	}
+}
+
+func toMap(entries []view.LabelEntry) map[string]string {
+	m := make(map[string]string, len(entries))
+	for _, e := range entries {
+		m[e.Key] = e.Value
+	}
+	return m
+}

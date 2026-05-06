@@ -3,16 +3,21 @@ package server
 import (
 	"context"
 	"errors"
+	"html/template"
+	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
 	"github.com/tomekjarosik/one-status/internal/middleware"
+	"github.com/tomekjarosik/one-status/internal/view"
 	"github.com/tomekjarosik/one-status/internal/web"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -39,6 +44,24 @@ func NewApp(cfg Config, svc *StatusMonitorService, dashboard *web.DashboardHandl
 
 // Run starts all servers and blocks until a shutdown signal is received.
 func (a *App) Run(ctx context.Context) error {
+
+	funcs := template.FuncMap{
+		"timeAgo": timeAgo,
+		"contains": func(slice []string, target string) bool {
+			return slices.Contains(slice, target)
+		},
+		"join": strings.Join,
+	}
+
+	tmpl, err := template.New("").Funcs(funcs).ParseFS(web.TemplateFS,
+		"templates/components/*.html",
+		"templates/pages/*.html",
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	view.Init(tmpl)
+
 	grpcServer := a.newGRPCServer()
 	grpcListener, err := net.Listen("tcp", a.config.GRPCPort)
 	if err != nil {

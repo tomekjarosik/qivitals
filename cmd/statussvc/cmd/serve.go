@@ -80,14 +80,8 @@ func runServe(cmd *cobra.Command, args []string) error {
 
 	statusSvc := server.NewStatusMonitorService(store)
 
-	dashboard, err := web.NewDashboardHandler(statusSvc)
-	if err != nil {
-		return err
-	}
-	details := web.NewSensorDetailsHandler(statusSvc, dashboard.Template())
-	if err != nil {
-		return err
-	}
+	dashboard := web.NewDashboardHandler(statusSvc)
+	details := web.NewSensorDetailsHandler(statusSvc)
 	// TODO: Web should be single component, not 2: dashboard and details
 	app := server.NewApp(cfg, statusSvc, dashboard, details)
 	return app.Run(ctx)

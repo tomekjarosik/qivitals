@@ -1,0 +1,11 @@
+{{define "label-pills"}}
+<div class="flex flex-wrap gap-1.5">
+    {{range $k, $v := .Labels}}
+    <span class="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-200/60">
+      {{$k}}:{{$v}}
+    </span>
+    {{else}}
+    <span class="text-xs italic text-slate-400">—</span>
+    {{end}}
+</div>
+{{end}}

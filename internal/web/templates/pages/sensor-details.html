@@ -1,10 +1,10 @@
-{{define "sensor-details"}}
+{{define "sensor-detail-page"}}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sensor · {{ .Sensor.Metadata.Name }}</title>
+    <title>Sensor · {{ .Sensor.Name }}</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.11"></script>
     <script>
@@ -25,10 +25,8 @@
     </script>
 </head>
 <body class="bg-gradient-to-br from-slate-50 to-indigo-50/50 min-h-screen font-sans antialiased text-slate-800">
-
 <div class="max-w-2xl mx-auto px-4 py-12">
     <a href="/" class="text-sm text-indigo-600 hover:underline mb-8 inline-block">← Back to Dashboard</a>
-
     <h1 class="text-3xl font-bold mb-8">Sensor Details</h1>
 
     <form method="post" class="space-y-8">
@@ -39,19 +37,18 @@
             <div class="space-y-4">
                 <div>
                     <label class="block text-sm font-medium text-slate-600 mb-1">Name</label>
-                    <input name="name" value="{{ .Sensor.Metadata.Name }}" required
+                    <input name="name" value="{{ .Sensor.Name }}" required
                            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-slate-600 mb-1">Description</label>
-                    <input name="description" value="{{ .Sensor.Metadata.Description }}"
+                    <input name="description" value="{{ .Sensor.Description }}"
                            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-slate-600 mb-1">Namespace</label>
-                    <input value="{{ .Sensor.Metadata.Namespace }}"
-                           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-slate-50"
-                           disabled>
+                    <input value="(not changeable)" disabled
+                           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-slate-50">
                     <p class="text-xs text-slate-400 mt-1">Namespace cannot be changed.</p>
                 </div>
                 <div>
@@ -63,16 +60,16 @@
                         </button>
                     </div>
                     <div id="labels-container" class="space-y-2">
-                        {{ range $k, $v := .Sensor.Metadata.Labels }}
+                        {{range $k, $v := .Sensor.Labels.Labels}}
                         <div class="flex gap-2 items-center">
-                            <input type="text" name="label_key" value="{{ $k }}"
+                            <input type="text" name="label_key" value="{{$k}}"
                                    class="w-1/3 rounded-md border border-slate-300 px-2 py-1 text-sm">
-                            <input type="text" name="label_value" value="{{ $v }}"
+                            <input type="text" name="label_value" value="{{$v}}"
                                    class="flex-1 rounded-md border border-slate-300 px-2 py-1 text-sm">
                             <button type="button" onclick="this.parentElement.remove()"
                                     class="text-rose-500 hover:text-rose-700 text-xs">✕</button>
                         </div>
-                        {{ end }}
+                        {{end}}
                     </div>
                 </div>
             </div>
@@ -84,18 +81,16 @@
             <div class="grid grid-cols-2 gap-4">
                 <div>
                     <label class="block text-sm font-medium text-slate-600 mb-1">Graceful Period (seconds)</label>
-                    <input type="number" name="graceful_period_seconds"
-                           value="{{ .Sensor.Spec.GracefulPeriodSeconds }}"
+                    <input type="number" name="graceful_period_seconds" value=""
                            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-slate-600 mb-1">Failure Period (seconds)</label>
-                    <input type="number" name="failure_period_seconds"
-                           value="{{ .Sensor.Spec.FailurePeriodSeconds }}"
+                    <input type="number" name="failure_period_seconds" value=""
                            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
                 </div>
             </div>
-            <p class="text-xs text-slate-400 mt-2">These thresholds determine whether the sensor becomes DEGRADED or DEAD when no heartbeat is received.</p>
+            <p class="text-xs text-slate-400 mt-2">Thresholds determine when the sensor becomes DEGRADED or DEAD.</p>
         </section>
 
         <!-- Status (read‑only) -->
@@ -104,44 +99,30 @@
             <div class="grid grid-cols-2 gap-4">
                 <div>
                     <span class="block text-sm font-medium text-slate-600 mb-1">State</span>
-                    <span class="inline-flex items-center gap-1.5 text-sm font-semibold
-                        {{ if eq .Sensor.Status.State "OK" }} text-emerald-700
-                    {{ else if eq .Sensor.Status.State "DEGRADED" }} text-amber-700
-                    {{ else }} text-rose-700 {{ end }}">
-                    <span class="h-2.5 w-2.5 rounded-full
-                            {{ if eq .Sensor.Status.State "OK" }} bg-emerald-500
-                    {{ else if eq .Sensor.Status.State "DEGRADED" }} bg-amber-500
-                    {{ else }} bg-rose-500 {{ end }}"></span>
-                    {{ .Sensor.Status.State }}
-                    </span>
+                    {{template "status-badge" .Sensor.Status}}
                 </div>
                 <div>
                     <span class="block text-sm font-medium text-slate-600 mb-1">Last Updated</span>
                     <span class="text-sm text-slate-800">
-                        {{ if .Sensor.Status.LastUpdatedTimestamp }}
-                            {{ timeAgo .Sensor.Status.LastUpdatedTimestamp }}
-                            <span class="text-xs text-slate-400">({{ .Sensor.Status.LastUpdatedTimestamp }})</span>
-                        {{ else }}
+                        {{if .Sensor.LastUpdated}}
+                            {{timeAgo .Sensor.LastUpdated}}
+                            <span class="text-xs text-slate-400">({{.Sensor.LastUpdated}})</span>
+                        {{else}}
                             Never
-                        {{ end }}
+                        {{end}}
                     </span>
                 </div>
             </div>
-            {{ if .Sensor.Status.ReportedData }}
+            {{if .Sensor.ReportedData.Data}}
             <div class="mt-4">
                 <span class="block text-sm font-medium text-slate-600 mb-2">Reported Data</span>
                 <div class="bg-slate-50 rounded-lg border border-slate-200 divide-y divide-slate-200">
-                    {{ range $k, $v := .Sensor.Status.ReportedData }}
-                    <div class="flex justify-between px-4 py-2 text-sm">
-                        <span class="text-slate-500">{{ $k }}</span>
-                        <span class="font-mono text-slate-800">{{ $v }}</span>
-                    </div>
-                    {{ end }}
+                    {{template "reported-data" .Sensor.ReportedData}}
                 </div>
             </div>
-            {{ else }}
+            {{else}}
             <p class="text-sm text-slate-400 mt-2">No reported data yet.</p>
-            {{ end }}
+            {{end}}
         </section>
 
         <!-- Actions -->
@@ -154,7 +135,6 @@
         </div>
     </form>
 </div>
-
 </body>
 </html>
 {{end}}
