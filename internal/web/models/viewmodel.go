@@ -23,14 +23,16 @@ type ReportedDataView struct {
 
 // SensorCardView is a single sensor card on the dashboard.
 type SensorCardView struct {
-	ID              string
-	Name            string
-	Description     string
-	Status          StatusBadgeView
-	BackgroundClass string
-	Labels          LabelPillsView
-	ReportedData    ReportedDataView
-	LastUpdated     int64
+	ID                    string
+	Name                  string
+	Description           string
+	Status                StatusBadgeView
+	BackgroundClass       string
+	Labels                LabelPillsView
+	GracefulPeriodSeconds int64
+	FailurePeriodSeconds  int64
+	ReportedData          ReportedDataView
+	LastUpdated           int64
 }
 
 // NamespaceGroupView groups sensors under a namespace.

@@ -140,14 +140,16 @@ func sensorToCardView(s *v1.Sensor) models.SensorCardView {
 		bgClass = "bg-rose-50/90"
 	}
 	return models.SensorCardView{
-		ID:              s.Metadata.Id,
-		Name:            s.Metadata.Name,
-		Description:     s.Metadata.Description,
-		Status:          models.StatusBadgeView{State: s.Status.State, ShowDot: true},
-		BackgroundClass: bgClass,
-		Labels:          models.LabelPillsView{Labels: s.Metadata.Labels},
-		ReportedData:    models.ReportedDataView{Data: s.Status.ReportedData},
-		LastUpdated:     s.Status.LastUpdatedTimestamp,
+		ID:                    s.Metadata.Id,
+		Name:                  s.Metadata.Name,
+		Description:           s.Metadata.Description,
+		Status:                models.StatusBadgeView{State: s.Status.State, ShowDot: true},
+		BackgroundClass:       bgClass,
+		Labels:                models.LabelPillsView{Labels: s.Metadata.Labels},
+		GracefulPeriodSeconds: s.Spec.GracefulPeriodSeconds,
+		FailurePeriodSeconds:  s.Spec.FailurePeriodSeconds,
+		ReportedData:          models.ReportedDataView{Data: s.Status.ReportedData},
+		LastUpdated:           s.Status.LastUpdatedTimestamp,
 	}
 }
 
