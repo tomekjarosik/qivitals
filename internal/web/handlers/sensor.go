@@ -1,4 +1,4 @@
-package web
+package handlers
 
 import (
 	"encoding/json"
@@ -8,16 +8,18 @@ import (
 	"strings"
 
 	v1 "github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
-	"github.com/tomekjarosik/one-status/internal/view"
-	"github.com/tomekjarosik/one-status/internal/view/components"
+	"github.com/tomekjarosik/one-status/internal/web"
+	"github.com/tomekjarosik/one-status/internal/web/models"
+	"github.com/tomekjarosik/one-status/internal/web/models/pages"
 )
 
 type SensorDetailsHandler struct {
-	svc v1.StatusServiceServer
+	renderer web.Renderer
+	svc      v1.StatusServiceServer
 }
 
-func NewSensorDetailsHandler(svc v1.StatusServiceServer) *SensorDetailsHandler {
-	return &SensorDetailsHandler{svc: svc}
+func NewSensorDetailsHandler(renderer web.Renderer, svc v1.StatusServiceServer) *SensorDetailsHandler {
+	return &SensorDetailsHandler{renderer: renderer, svc: svc}
 }
 
 func (h *SensorDetailsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -44,7 +46,7 @@ func (h *SensorDetailsHandler) handleGet(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	card := sensorToCardView(resp.Sensors[0])
-	page := components.NewSensorDetailPage(view.SensorDetailPageView{Sensor: card})
+	page := pages.NewSensorDetailPage(models.SensorDetailPageView{Sensor: card}, h.renderer)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := page.Render(r.Context(), w); err != nil {
 		http.Error(w, "Template error", http.StatusInternalServerError)

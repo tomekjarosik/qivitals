@@ -1,18 +1,9 @@
 {{define "status-badge"}}
-{{- $dotClass := "" -}}
-{{- $textClass := "" -}}
+{{- $dotClass := "bg-rose-500 ring-rose-100" -}}
 {{- if eq .State "OK" -}}
 {{- $dotClass = "bg-emerald-500 ring-emerald-100" -}}
-{{- $textClass = "text-emerald-700" -}}
 {{- else if eq .State "DEGRADED" -}}
 {{- $dotClass = "bg-amber-500 ring-amber-100" -}}
-{{- $textClass = "text-amber-700" -}}
-{{- else -}}
-{{- $dotClass = "bg-rose-500 ring-rose-100" -}}
-{{- $textClass = "text-rose-700" -}}
 {{- end -}}
-<span class="inline-flex items-center gap-1.5">
-  {{if .ShowDot}}<span class="h-2.5 w-2.5 rounded-full flex-shrink-0 ring-2 {{$dotClass}}"></span>{{end}}
-  <span class="text-sm font-semibold {{$textClass}}">{{.State}}</span>
-</span>
+<span class="h-2.5 w-2.5 mt-0.5 rounded-full flex-shrink-0 ring-2 {{$dotClass}}"></span>
 {{end}}

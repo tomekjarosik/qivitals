@@ -99,18 +99,14 @@
             <div class="grid grid-cols-2 gap-4">
                 <div>
                     <span class="block text-sm font-medium text-slate-600 mb-1">State</span>
-                    {{template "status-badge" .Sensor.Status}}
+                    <div class="flex items-center gap-2">
+                        {{template "status-badge" .Sensor.Status}}
+                        <span class="text-sm font-medium text-slate-700">Healthy</span>  <!-- optional static label -->
+                    </div>
                 </div>
                 <div>
                     <span class="block text-sm font-medium text-slate-600 mb-1">Last Updated</span>
-                    <span class="text-sm text-slate-800">
-                        {{if .Sensor.LastUpdated}}
-                            {{timeAgo .Sensor.LastUpdated}}
-                            <span class="text-xs text-slate-400">({{.Sensor.LastUpdated}})</span>
-                        {{else}}
-                            Never
-                        {{end}}
-                    </span>
+                    ...
                 </div>
             </div>
             {{if .Sensor.ReportedData.Data}}

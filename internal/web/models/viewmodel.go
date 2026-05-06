@@ -1,4 +1,4 @@
-package view
+package models
 
 import (
 	"encoding/json"
@@ -23,13 +23,14 @@ type ReportedDataView struct {
 
 // SensorCardView is a single sensor card on the dashboard.
 type SensorCardView struct {
-	ID           string
-	Name         string
-	Description  string
-	Status       StatusBadgeView
-	Labels       LabelPillsView
-	ReportedData ReportedDataView
-	LastUpdated  int64 // Unix timestamp, 0 = never
+	ID              string
+	Name            string
+	Description     string
+	Status          StatusBadgeView
+	BackgroundClass string
+	Labels          LabelPillsView
+	ReportedData    ReportedDataView
+	LastUpdated     int64
 }
 
 // NamespaceGroupView groups sensors under a namespace.

@@ -12,6 +12,7 @@ import (
 	"github.com/tomekjarosik/one-status/internal/server"
 	"github.com/tomekjarosik/one-status/internal/storage"
 	"github.com/tomekjarosik/one-status/internal/web"
+	"github.com/tomekjarosik/one-status/internal/web/handlers"
 )
 
 func NewCmdServe() *cobra.Command {
@@ -78,11 +79,25 @@ func runServe(cmd *cobra.Command, args []string) error {
 		store = storage.NewPostgresSensorStorage(dbPool)
 	}
 
+	// Initialize the core service
 	statusSvc := server.NewStatusMonitorService(store)
 
-	dashboard := web.NewDashboardHandler(statusSvc)
-	details := web.NewSensorDetailsHandler(statusSvc)
-	// TODO: Web should be single component, not 2: dashboard and details
-	app := server.NewApp(cfg, statusSvc, dashboard, details)
+	renderer := web.NewTemplateRenderer()
+
+	// Initialize individual handlers with the templates
+	dashboard := handlers.NewDashboardHandler(renderer, statusSvc)
+	details := handlers.NewSensorDetailsHandler(renderer, statusSvc)
+
+	// Initialize the Gateway (gRPC-to-HTTP)
+	gateway, err := server.NewGatewayHandler(ctx, cfg.GRPCPort)
+	if err != nil {
+		return fmt.Errorf("failed to initialize gateway: %w", err)
+	}
+
+	// Assemble the unified Web Router (The single "web" component)
+	webRouter := web.NewRouter(gateway, dashboard, details)
+
+	// Pass the single webRouter to the App
+	app := server.NewApp(cfg, statusSvc, webRouter)
 	return app.Run(ctx)
 }

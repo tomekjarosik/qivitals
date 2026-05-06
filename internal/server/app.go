@@ -3,22 +3,17 @@ package server
 import (
 	"context"
 	"errors"
-	"html/template"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
-	"slices"
-	"strings"
 	"syscall"
 	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
 	"github.com/tomekjarosik/one-status/internal/middleware"
-	"github.com/tomekjarosik/one-status/internal/view"
-	"github.com/tomekjarosik/one-status/internal/web"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/grpclog"
@@ -26,99 +21,63 @@ import (
 
 // App represents the composed gRPC + HTTP gateway + Web UI application.
 type App struct {
-	config        Config
-	service       *StatusMonitorService // implements the gRPC service interface
-	dashboard     *web.DashboardHandler
-	sensorDetails *web.SensorDetailsHandler
+	config     Config
+	service    *StatusMonitorService
+	webHandler http.Handler
 }
 
-// NewApp creates a new application instance.
-func NewApp(cfg Config, svc *StatusMonitorService, dashboard *web.DashboardHandler, sensorDetails *web.SensorDetailsHandler) *App {
+func NewApp(cfg Config, svc *StatusMonitorService, webHandler http.Handler) *App {
 	return &App{
-		config:        cfg,
-		service:       svc,
-		dashboard:     dashboard,
-		sensorDetails: sensorDetails,
+		config:     cfg,
+		service:    svc,
+		webHandler: webHandler,
 	}
 }
 
-// Run starts all servers and blocks until a shutdown signal is received.
 func (a *App) Run(ctx context.Context) error {
-
-	funcs := template.FuncMap{
-		"timeAgo": timeAgo,
-		"contains": func(slice []string, target string) bool {
-			return slices.Contains(slice, target)
-		},
-		"join": strings.Join,
-	}
-
-	tmpl, err := template.New("").Funcs(funcs).ParseFS(web.TemplateFS,
-		"templates/components/*.html",
-		"templates/pages/*.html",
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
-	view.Init(tmpl)
-
 	grpcServer := a.newGRPCServer()
 	grpcListener, err := net.Listen("tcp", a.config.GRPCPort)
 	if err != nil {
 		return err
 	}
 
-	gatewayHandler, err := a.newGatewayHandler(ctx)
-	if err != nil {
-		return err
-	}
-
-	// Assemble HTTP mux: /api/* -> gateway, / -> dashboard
-	httpMux := http.NewServeMux()
-	httpMux.Handle("/api/", http.StripPrefix("/api", gatewayHandler))
-	httpMux.HandleFunc("/sensors/{id}", a.sensorDetails.ServeHTTP)
-	httpMux.HandleFunc("/", a.dashboard.ServeHTTP)
-
 	httpServer := &http.Server{
 		Addr:    a.config.HTTPPort,
-		Handler: httpMux,
+		Handler: a.webHandler,
 	}
 
-	// Setup signal handling for graceful shutdown
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-	// Start servers in goroutines
+	// Start gRPC
 	go func() {
 		grpclog.Infof("gRPC server listening on %s", a.config.GRPCPort)
 		if err := grpcServer.Serve(grpcListener); err != nil && err != grpc.ErrServerStopped {
-			grpclog.Fatalf("gRPC server error: %v", err)
+			log.Fatalf("gRPC server error: %v", err)
 		}
 	}()
 
+	// Start HTTP
 	go func() {
 		grpclog.Infof("HTTP gateway + UI listening on %s", a.config.HTTPPort)
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			grpclog.Fatalf("HTTP server error: %v", err)
+			log.Fatalf("HTTP server error: %v", err)
 		}
 	}()
 
-	// Wait for shutdown signal
+	// Wait for shutdown
 	sig := <-sigCh
-	grpclog.Infof("Received signal %v, initiating graceful shutdown...", sig)
+	log.Printf("Received signal %v, initiating graceful shutdown...", sig)
 
-	// Create a timeout context for shutdown
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer shutdownCancel()
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-	// Shutdown HTTP server first (stops accepting new connections, finishes ongoing)
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
-		grpclog.Errorf("HTTP server shutdown error: %v", err)
+		log.Printf("HTTP shutdown error: %v", err)
 	}
 
-	// Then stop gRPC server gracefully
 	grpcServer.GracefulStop()
-	grpclog.Info("Shutdown complete")
+	log.Println("Shutdown complete")
 
 	return nil
 }
@@ -137,11 +96,11 @@ func (a *App) newGRPCServer() *grpc.Server {
 	return grpcServer
 }
 
-// newGatewayHandler creates a gRPC‑Gateway HTTP handler that forwards requests to the gRPC endpoint.
-func (a *App) newGatewayHandler(ctx context.Context) (http.Handler, error) {
+// NewGatewayHandler creates a gRPC‑Gateway HTTP handler that forwards requests to the gRPC endpoint.
+func NewGatewayHandler(ctx context.Context, grpcPort string) (http.Handler, error) {
 	mux := runtime.NewServeMux()
 	conn, err := grpc.NewClient(
-		a.config.GRPCPort,
+		grpcPort,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {

@@ -1,8 +1,7 @@
-package web
+package handlers
 
 import (
 	"bytes"
-	"embed"
 	"log"
 	"net/http"
 	"sort"
@@ -11,19 +10,19 @@ import (
 	"time"
 
 	v1 "github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
-	"github.com/tomekjarosik/one-status/internal/view"
-	"github.com/tomekjarosik/one-status/internal/view/components"
+	"github.com/tomekjarosik/one-status/internal/web"
+	"github.com/tomekjarosik/one-status/internal/web/models"
+	"github.com/tomekjarosik/one-status/internal/web/models/components"
+	"github.com/tomekjarosik/one-status/internal/web/models/pages"
 )
 
-//go:embed templates/**
-var TemplateFS embed.FS
-
 type DashboardHandler struct {
-	svc v1.StatusServiceServer
+	renderer web.Renderer
+	svc      v1.StatusServiceServer
 }
 
-func NewDashboardHandler(svc v1.StatusServiceServer) *DashboardHandler {
-	return &DashboardHandler{svc: svc}
+func NewDashboardHandler(renderer web.Renderer, svc v1.StatusServiceServer) *DashboardHandler {
+	return &DashboardHandler{renderer: renderer, svc: svc}
 }
 
 func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -31,12 +30,12 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	statuses := q["statuses"]
 
 	// Build label entries
-	var labels []view.LabelEntry
+	var labels []models.LabelEntry
 	for key, vals := range q {
 		if strings.HasPrefix(key, "labels[") && strings.HasSuffix(key, "]") {
 			k := key[7 : len(key)-1]
 			if k != "" && len(vals) > 0 {
-				labels = append(labels, view.LabelEntry{Key: k, Value: vals[0]})
+				labels = append(labels, models.LabelEntry{Key: k, Value: vals[0]})
 			}
 		}
 	}
@@ -66,24 +65,24 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Convert proto → view models
-	groupsMap := map[string][]view.SensorCardView{}
+	groupsMap := map[string][]models.SensorCardView{}
 	for _, s := range resp.Sensors {
 		ns := s.Metadata.Namespace
 		card := sensorToCardView(s)
 		groupsMap[ns] = append(groupsMap[ns], card)
 	}
 
-	var groups []view.NamespaceGroupView
+	var groups []models.NamespaceGroupView
 	for ns, cards := range groupsMap {
 		sort.Slice(cards, func(i, j int) bool { return cards[i].Name < cards[j].Name })
-		groups = append(groups, view.NamespaceGroupView{
+		groups = append(groups, models.NamespaceGroupView{
 			Namespace: ns,
 			Sensors:   cards,
 		})
 	}
 	sort.Slice(groups, func(i, j int) bool { return groups[i].Namespace < groups[j].Namespace })
 
-	filter := view.FilterView{
+	filter := models.FilterView{
 		Namespace:    q.Get("namespace"),
 		Search:       q.Get("search"),
 		Name:         q.Get("name"),
@@ -94,13 +93,13 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		OrderDesc:    orderDesc,
 	}
 
-	empty := view.NewDefaultEmptyState()
-	sensorGridData := view.SensorGridData{
+	empty := models.NewDefaultEmptyState()
+	sensorGridData := models.SensorGridData{
 		Groups: groups,
 		Empty:  empty,
 	}
 
-	pageData := view.DashboardPageView{
+	pageData := models.DashboardPageView{
 		Now:        time.Now().Format("2006-01-02 15:04:05"),
 		FullURL:    r.URL.RequestURI(),
 		SensorGrid: sensorGridData, // <-- now a single field
@@ -112,14 +111,14 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	var buf bytes.Buffer
 	if isHTMX {
-		gridComp := components.NewSensorGrid(pageData.SensorGrid)
+		gridComp := components.NewSensorGrid(pageData.SensorGrid, h.renderer)
 		if err := gridComp.Render(r.Context(), &buf); err != nil {
 			log.Printf("Render error: %v", err)
 			http.Error(w, "Render error", http.StatusInternalServerError)
 			return
 		}
 	} else {
-		comp := components.NewDashboardPage(pageData)
+		comp := pages.NewDashboardPage(pageData, h.renderer)
 		if err := comp.Render(r.Context(), &buf); err != nil {
 			log.Printf("Render error: %v", err)
 			http.Error(w, "Render error", http.StatusInternalServerError)
@@ -130,22 +129,29 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	buf.WriteTo(w)
 }
 
-func sensorToCardView(s *v1.Sensor) view.SensorCardView {
-	return view.SensorCardView{
-		ID:          s.Metadata.Id,
-		Name:        s.Metadata.Name,
-		Description: s.Metadata.Description,
-		Status: view.StatusBadgeView{
-			State:   s.Status.State,
-			ShowDot: true,
-		},
-		Labels:       view.LabelPillsView{Labels: s.Metadata.Labels},
-		ReportedData: view.ReportedDataView{Data: s.Status.ReportedData},
-		LastUpdated:  s.Status.LastUpdatedTimestamp,
+func sensorToCardView(s *v1.Sensor) models.SensorCardView {
+	bgClass := "bg-slate-50/90" // fallback
+	switch s.Status.State {
+	case "OK":
+		bgClass = "bg-emerald-50/90"
+	case "DEGRADED":
+		bgClass = "bg-amber-50/90"
+	case "DEAD":
+		bgClass = "bg-rose-50/90"
+	}
+	return models.SensorCardView{
+		ID:              s.Metadata.Id,
+		Name:            s.Metadata.Name,
+		Description:     s.Metadata.Description,
+		Status:          models.StatusBadgeView{State: s.Status.State, ShowDot: true},
+		BackgroundClass: bgClass,
+		Labels:          models.LabelPillsView{Labels: s.Metadata.Labels},
+		ReportedData:    models.ReportedDataView{Data: s.Status.ReportedData},
+		LastUpdated:     s.Status.LastUpdatedTimestamp,
 	}
 }
 
-func toMap(entries []view.LabelEntry) map[string]string {
+func toMap(entries []models.LabelEntry) map[string]string {
 	m := make(map[string]string, len(entries))
 	for _, e := range entries {
 		m[e.Key] = e.Value
