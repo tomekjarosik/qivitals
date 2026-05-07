@@ -137,21 +137,6 @@ func (m *MemorySensorStorage) GetStatus(ctx context.Context, sensorID string) (*
 	return state, nil
 }
 
-// GetByNaturalKey allows the service layer to translate human inputs into an ID
-func (m *MemorySensorStorage) GetByNaturalKey(ctx context.Context, namespace string, name string) (*SensorState, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	for _, state := range m.sensors {
-		// Assuming Namespace gets added to SensorInfo.
-		if state.Info.Name == name {
-			return state, nil
-		}
-	}
-
-	return nil, ErrSensorNotFound
-}
-
 // Query returns all sensors matching the broader filter criteria
 func (m *MemorySensorStorage) Query(ctx context.Context, filter QueryFilter) ([]*SensorState, error) {
 	m.mu.RLock()
@@ -252,21 +237,4 @@ func (m *MemorySensorStorage) Delete(ctx context.Context, sensorID string) error
 
 	delete(m.sensors, sensorID)
 	return nil
-}
-
-// matchesPath checks if a path matches the given pattern
-func matchesPath(foundPath, path string) bool {
-	if path == "" {
-		return true
-	}
-	if foundPath == path {
-		return true
-	}
-	if len(path) > 0 && path[len(path)-1] == '*' && string(path[len(path)-1]) == "*" {
-		prefix := path[:len(path)-1]
-		if len(foundPath) >= len(prefix) && foundPath[:len(prefix)] == prefix {
-			return true
-		}
-	}
-	return false
 }
