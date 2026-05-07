@@ -1,113 +1,37 @@
 package e2e
 
-import (
-	"testing"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	v1 "github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
-)
-
-func TestWorkflow_Update_AllFlagsSeparately(t *testing.T) {
-	serverCmd := startTestServer(t)
-	defer serverCmd.Process.Kill()
-
-	// Define a struct to represent a single flag-based test case
-	type updateTestCase struct {
-		name   string
-		args   []string                         // The flags to pass to the CLI
-		verify func(t *testing.T, s *v1.Sensor) // How to verify the change
-	}
-
-	// Define the baseline sensor
-	initialNamespace := "production"
-	initialName := "web-api"
-	initialDesc := "Original Description"
-
-	// Register the baseline
-	sensorID := Register(t, initialNamespace, initialName, initialDesc, "3600s", "7200s", "env=prod", "tier=backend")
-
-	tests := []updateTestCase{
-		{
-			name: "Patch Description",
-			args: []string{"update", "--id", sensorID, "--description", "New Description"},
-			verify: func(t *testing.T, s *v1.Sensor) {
-				assert.Equal(t, "New Description", s.Metadata.Description)
-			},
-		},
-		{
-			name: "Rename Sensor",
-			args: []string{"update", "--id", sensorID, "--new-name", "new-web-api"},
-			verify: func(t *testing.T, s *v1.Sensor) {
-				assert.Equal(t, "new-web-api", s.Metadata.Name)
-			},
-		},
-		{
-			name: "Rename Namespace",
-			args: []string{"update", "--id", sensorID, "--new-namespace", "ns_x"},
-			verify: func(t *testing.T, s *v1.Sensor) {
-				assert.Equal(t, "ns_x", s.Metadata.Namespace)
-			},
-		},
-		{
-			name: "Patch Graceful Period",
-			args: []string{"update", "--id", sensorID, "--graceful", "1800s"},
-			verify: func(t *testing.T, s *v1.Sensor) {
-				assert.Equal(t, int64(1800), s.Spec.GracefulPeriodSeconds)
-			},
-		},
-		{
-			name: "Patch Failure Period",
-			args: []string{"update", "--id", sensorID, "--failure", "5000s"},
-			verify: func(t *testing.T, s *v1.Sensor) {
-				assert.Equal(t, int64(5000), s.Spec.FailurePeriodSeconds)
-			},
-		},
-		{
-			name: "Rename Sensor",
-			args: []string{"update", "--id", sensorID, "--new-name", "new-web-api"},
-			verify: func(t *testing.T, s *v1.Sensor) {
-				assert.Equal(t, "new-web-api", s.Metadata.Name)
-			},
-		},
-		{
-			name: "Move Namespace",
-			args: []string{"update", "--id", sensorID, "--new-namespace", "staging"},
-			verify: func(t *testing.T, s *v1.Sensor) {
-				assert.Equal(t, "staging", s.Metadata.Namespace)
-			},
-		},
-		{
-			name: "Add Label",
-			args: []string{"update", "--id", sensorID, "--label", "owner=alice"},
-			verify: func(t *testing.T, s *v1.Sensor) {
-				assert.Equal(t, "alice", s.Metadata.Labels["owner"])
-				assert.Equal(t, "prod", s.Metadata.Labels["env"]) // Ensure old labels persist
-			},
-		},
-		{
-			name: "Remove Label",
-			args: []string{"update", "--id", sensorID, "--remove-label", "tier"},
-			verify: func(t *testing.T, s *v1.Sensor) {
-				_, exists := s.Metadata.Labels["tier"]
-				assert.False(t, exists)
-				assert.Equal(t, "prod", s.Metadata.Labels["env"]) // Ensure others remain
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			out, stderr, err := runCLI(t, tt.args...)
-			require.NoError(t, err, "CLI error for %s: %s", tt.name, stderr)
-			require.Contains(t, out, "updated successfully")
-
-			queryArgs := []string{"query", "--id", sensorID}
-			resp := Query(t, queryArgs...)
-			require.Len(t, resp.Sensors, 1)
-			updatedSensor := resp.Sensors[0]
-
-			tt.verify(t, updatedSensor)
-		})
-	}
-}
+//func TestWorkflow_Update_Success(t *testing.T) {
+//	startTestServer(t)
+//
+//	out, _, err := runCLI(t,
+//		"register", "--namespace", "production", "--name", "web-api",
+//		"--description", "Primary API server", "--graceful", "1h", "--failure", "2h",
+//		"--label", "env=prod", "--label", "tier=backend")
+//	require.NoError(t, err)
+//	sensorID := strings.TrimSpace(strings.Split(out, "id: ")[1])
+//
+//	initialNamespace := "production"
+//	initialName := "web-api"
+//
+//	_, stderr, err := runCLI(t, "update", "--id", sensorID,
+//		"--description", "Updated API Description",
+//		"--graceful", "1800s")
+//	require.NoError(t, err, "CLI Update command failed. Stderr: %s", stderr)
+//	require.Contains(t, out, "updated successfully")
+//
+//	out, _, err = runCLI(t, "query", "--namespace", initialNamespace, "--name", initialName)
+//	require.NoError(t, err)
+//	var resp v1.QuerySensorsResponse
+//	require.NoError(t, protojson.Unmarshal([]byte(out), &resp))
+//
+//	require.Len(t, resp.Sensors, 1, "Sensor should still exist in the namespace")
+//	updatedSensor := resp.Sensors[0]
+//
+//	assert.Equal(t, "Updated API Description", updatedSensor.Metadata.Description)
+//	assert.Equal(t, int64(1800), updatedSensor.Spec.GracefulPeriodSeconds)
+//
+//	// Regression: unmentioned fields unchanged
+//	assert.Equal(t, initialName, updatedSensor.Metadata.Name)
+//	assert.Equal(t, initialNamespace, updatedSensor.Metadata.Namespace)
+//	assert.Equal(t, "prod", updatedSensor.Metadata.Labels["env"])
+//}

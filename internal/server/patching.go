@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
-	v1 "github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
-	"github.com/tomekjarosik/one-status/internal/storage"
+	v1 "github.com/tomekjarosik/qivitals/gen/api/qivitals/v1"
+	"github.com/tomekjarosik/qivitals/internal/storage"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -45,7 +45,7 @@ func validatePath(path string) error {
 // 2. The gRPC Handler
 // ---------------------------------------------------------------------------
 
-func (s *StatusMonitorService) PatchSensor(
+func (s *QiVitalsService) PatchSensor(
 	ctx context.Context,
 	req *v1.PatchSensorRequest,
 ) (*v1.PatchSensorResponse, error) {

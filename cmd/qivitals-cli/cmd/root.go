@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	v1 "github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
+	v1 "github.com/tomekjarosik/qivitals/gen/api/qivitals/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -29,9 +29,9 @@ func NewStatusClient(ctx context.Context) (v1.StatusServiceClient, *grpc.ClientC
 // InitializeCommands sets up the root command and all subcommands.
 func InitializeCommands() *cobra.Command {
 	var rootCmd = &cobra.Command{
-		Use:   "sensorcli",
-		Short: "One Status - a CLI for managing and monitoring status signals.",
-		Long: `sensorcli is a command-line tool for interacting with the One Status service.
+		Use:   "qivitals-cli",
+		Short: "QiVitals - a CLI for managing and monitoring status signals.",
+		Long: `qivitals-cli is a command-line tool for interacting with the QiVitals service.
 Register sensors, send health check signals, and query sensor statuses all from the terminal.`,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			if err := initConfig(); err != nil {
@@ -48,7 +48,7 @@ Register sensors, send health check signals, and query sensor statuses all from 
 
 	// Define the --url global flag for the service endpoint
 	var baseURL string
-	rootCmd.PersistentFlags().StringVar(&baseURL, "url", "localhost:50051", "One Status service gRPC endpoint (host:port)")
+	rootCmd.PersistentFlags().StringVar(&baseURL, "url", "localhost:50051", "QiVitals service gRPC endpoint (host:port)")
 	viper.BindPFlag("url", rootCmd.PersistentFlags().Lookup("url"))
 
 	// Define the --machine global flag for JSON output
@@ -85,8 +85,8 @@ func Execute(rootCmd *cobra.Command) {
 // initConfig handles configuration loading (Placeholder)
 func initConfig() error {
 	viper.SetDefault("url", "localhost:50051")
-	// Add the prefix. Viper will automatically look for SENSORCLI_URL
-	viper.SetEnvPrefix("SENSORCLI")
+	// Add the prefix. Viper will automatically look for QIVITALS_URL
+	viper.SetEnvPrefix("QIVITALS")
 	viper.AutomaticEnv()
 	return nil
 }

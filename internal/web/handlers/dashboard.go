@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	v1 "github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
-	"github.com/tomekjarosik/one-status/internal/web"
-	"github.com/tomekjarosik/one-status/internal/web/models"
-	"github.com/tomekjarosik/one-status/internal/web/models/components"
-	"github.com/tomekjarosik/one-status/internal/web/models/pages"
+	v1 "github.com/tomekjarosik/qivitals/gen/api/qivitals/v1"
+	"github.com/tomekjarosik/qivitals/internal/web"
+	"github.com/tomekjarosik/qivitals/internal/web/models"
+	"github.com/tomekjarosik/qivitals/internal/web/models/components"
+	"github.com/tomekjarosik/qivitals/internal/web/models/pages"
 )
 
 type DashboardHandler struct {

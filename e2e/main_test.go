@@ -8,8 +8,8 @@ import (
 )
 
 var (
-	serverBin = "./test-statussvc-bin"
-	cliBin    = "./test-sensorcli-bin"
+	serverBin = "./test-qivitals-bin"
+	cliBin    = "./test-qivitals-cli-bin"
 )
 
 func TestMain(m *testing.M) {
@@ -20,7 +20,7 @@ func TestMain(m *testing.M) {
 // runTests handles setup, execution, and ensures deferred cleanup runs
 func runTests(m *testing.M) int {
 	log.Println("Building server binary...")
-	buildServer := exec.Command("go", "build", "-o", serverBin, "../cmd/statussvc/main.go")
+	buildServer := exec.Command("go", "build", "-o", serverBin, "../cmd/qivitals/main.go")
 	if err := buildServer.Run(); err != nil {
 		log.Fatalf("Failed to build server: %v", err)
 	}
@@ -28,7 +28,7 @@ func runTests(m *testing.M) int {
 	defer os.Remove(serverBin)
 
 	log.Println("Building CLI binary...")
-	buildCLI := exec.Command("go", "build", "-o", cliBin, "../cmd/sensorcli/main.go")
+	buildCLI := exec.Command("go", "build", "-o", cliBin, "../cmd/qivitals-cli/main.go")
 	if err := buildCLI.Run(); err != nil {
 		log.Fatalf("Failed to build CLI: %v", err)
 	}

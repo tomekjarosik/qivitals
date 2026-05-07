@@ -4,15 +4,14 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/tomekjarosik/one-status/internal/database"
-	"github.com/tomekjarosik/one-status/internal/server"
-	"github.com/tomekjarosik/one-status/internal/storage"
-	"github.com/tomekjarosik/one-status/internal/web"
-	"github.com/tomekjarosik/one-status/internal/web/handlers"
+	"github.com/tomekjarosik/qivitals/internal/database"
+	"github.com/tomekjarosik/qivitals/internal/server"
+	"github.com/tomekjarosik/qivitals/internal/storage"
+	"github.com/tomekjarosik/qivitals/internal/web"
+	"github.com/tomekjarosik/qivitals/internal/web/handlers"
 )
 
 func NewCmdServe() *cobra.Command {
@@ -26,7 +25,7 @@ func NewCmdServe() *cobra.Command {
 	// Flags – mapstructure tags in server.Config match these flag names
 	cmd.Flags().String("grpc-port", "localhost:50051", "Address and port for gRPC server")
 	cmd.Flags().String("http-port", "localhost:8088", "Address and port for HTTP gateway and UI")
-	cmd.Flags().String("log-file", "statussvc.log", "Path to log file")
+	cmd.Flags().String("log-file", "qivitals.log", "Path to log file")
 	cmd.Flags().String("database-url", "", "PostgreSQL connection URL (empty = in-memory storage)")
 	cmd.Flags().Int32("database-max-conns", 10, "Maximum database connections")
 
@@ -69,7 +68,8 @@ func runServe(cmd *cobra.Command, args []string) error {
 	var store storage.SensorStorage
 	if cfg.DatabaseURL == "" {
 		log.Println("WARNING: Using in-memory storage with naive periodic persistence")
-		store = storage.NewSnapshotStorage(storage.NewMemorySensorStorage(), "onstatus.data", 5*time.Second)
+		//store = storage.NewSnapshotStorage(storage.NewMemorySensorStorage(), "onstatus.data", 5*time.Second)
+		store = storage.NewMemorySensorStorage()
 	} else {
 		dbPool, err := database.NewPostgresPool(ctx, cfg.DatabaseURL, cfg.MaxConns)
 		if err != nil {
@@ -80,13 +80,13 @@ func runServe(cmd *cobra.Command, args []string) error {
 	}
 
 	// Initialize the core service
-	statusSvc := server.NewStatusMonitorService(store)
+	qivitalsSvc := server.NewStatusMonitorService(store)
 
 	renderer := web.NewTemplateRenderer()
 
 	// Initialize individual handlers with the templates
-	dashboard := handlers.NewDashboardHandler(renderer, statusSvc)
-	details := handlers.NewSensorDetailsHandler(renderer, statusSvc)
+	dashboard := handlers.NewDashboardHandler(renderer, qivitalsSvc)
+	details := handlers.NewSensorDetailsHandler(renderer, qivitalsSvc)
 
 	// Initialize the Gateway (gRPC-to-HTTP)
 	gateway, err := server.NewGatewayHandler(ctx, cfg.GRPCPort)
@@ -98,6 +98,6 @@ func runServe(cmd *cobra.Command, args []string) error {
 	webRouter := web.NewRouter(gateway, dashboard, details)
 
 	// Pass the single webRouter to the App
-	app := server.NewApp(cfg, statusSvc, webRouter)
+	app := server.NewApp(cfg, qivitalsSvc, webRouter)
 	return app.Run(ctx)
 }

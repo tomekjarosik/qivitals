@@ -4,8 +4,8 @@ import (
 	"context"
 	"io"
 
-	"github.com/tomekjarosik/one-status/internal/web"
-	"github.com/tomekjarosik/one-status/internal/web/models"
+	"github.com/tomekjarosik/qivitals/internal/web"
+	"github.com/tomekjarosik/qivitals/internal/web/models"
 )
 
 type ReportedData struct {

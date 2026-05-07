@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/tomekjarosik/one-status/cmd/statussvc/cmd"
+	"github.com/tomekjarosik/qivitals/cmd/qivitals-cli/cmd"
 )
 
 func main() {

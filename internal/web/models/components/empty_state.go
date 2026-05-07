@@ -5,7 +5,7 @@ import (
 	"html/template"
 	"io"
 
-	"github.com/tomekjarosik/one-status/internal/web"
+	"github.com/tomekjarosik/qivitals/internal/web"
 )
 
 type EmptyState struct {

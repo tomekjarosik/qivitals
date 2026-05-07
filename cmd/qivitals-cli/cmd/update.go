@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	v1 "github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
+	v1 "github.com/tomekjarosik/qivitals/gen/api/qivitals/v1"
 )
 
 func NewCmdUpdate() *cobra.Command {
@@ -33,13 +33,13 @@ Identify the sensor using EITHER its --id OR its --namespace and --name.
 
 Examples:
   # Patch using unique ID
-  sensorcli update --id 550e8400-e29b --failure 3600
+  qivitals-cli update --id 550e8400-e29b --failure 3600
 
   # Patch using human-readable Namespace & Name
-  sensorcli update --namespace db --name "Daily Backup" --graceful 1800
+  qivitals-cli update --namespace db --name "Daily Backup" --graceful 1800
 
   # Rename a sensor
-  sensorcli update --namespace infra --name "old-job" --new-name "new-job"`,
+  qivitals-cli update --namespace infra --name "old-job" --new-name "new-job"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if sensorID == "" && sensorName == "" {
 				return fmt.Errorf("must provide either --id or --name to identify the sensor to update")

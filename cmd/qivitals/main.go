@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/tomekjarosik/one-status/cmd/sensorcli/cmd"
+	"github.com/tomekjarosik/qivitals/cmd/qivitals/cmd"
 )
 
 func main() {

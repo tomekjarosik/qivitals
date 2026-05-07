@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	v1 "github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
+	v1 "github.com/tomekjarosik/qivitals/gen/api/qivitals/v1"
 )
 
 func NewCmdQuery() *cobra.Command {

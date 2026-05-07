@@ -13,14 +13,14 @@ import (
 // InitializeCommands sets up the root command and all subcommands.
 func InitializeCommands() *cobra.Command {
 	var rootCmd = &cobra.Command{
-		Use:   "statussvc",
-		Short: "One Status - a personal status page system for tracking life signals.",
-		Long: `One Status is a system for tracking various personal and infrastructure signals
+		Use:   "qivitals",
+		Short: "QiVitals - a personal status page system for tracking life signals.",
+		Long: `QiVitals is a system for tracking various personal and infrastructure signals
 through push and pull mechanisms. It stores timestamps from diverse sources (backups,
 payments, health checks) and displays them as a customizable status page.
 Supports periodic check-ins via ed25519-signed signals, manual human inputs,
 and automated endpoint monitoring, all stored in PostgreSQL and served via HTTP/gRPC.`,
-		// NoArgs allows running just 'statussvc' to show help
+		// NoArgs allows running just 'qivitals' to show help
 		Args:                       cobra.NoArgs,
 		SuggestionsMinimumDistance: 2,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {

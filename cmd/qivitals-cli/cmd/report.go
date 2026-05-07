@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	v1 "github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
+	v1 "github.com/tomekjarosik/qivitals/gen/api/qivitals/v1"
 )
 
 func NewCmdReport() *cobra.Command {
@@ -20,8 +20,8 @@ func NewCmdReport() *cobra.Command {
 The timestamp of your signal keeps the sensor status as ACTIVE. If you stop sending signals for too long, the sensor will transition to DEGRADED and then DEAD based on the grace and failure periods you defined when registering it.
 
 Examples:
-  sensorcli report --id my-backup --data="status=ok" --data="records=1524"
-  sensorcli report -i sensor-001 -d="cpu=45" -d="memory=72"`,
+  qivitals-cli report --id my-backup --data="status=ok" --data="records=1524"
+  qivitals-cli report -i sensor-001 -d="cpu=45" -d="memory=72"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runReport(cmd, args, sensorID, data)
 		},

@@ -6,24 +6,24 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	v1 "github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
-	"github.com/tomekjarosik/one-status/internal/storage"
+	v1 "github.com/tomekjarosik/qivitals/gen/api/qivitals/v1"
+	"github.com/tomekjarosik/qivitals/internal/storage"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-type StatusMonitorService struct {
+type QiVitalsService struct {
 	v1.UnimplementedStatusServiceServer
 	storage storage.SensorStorage
 }
 
-func NewStatusMonitorService(storage storage.SensorStorage) *StatusMonitorService {
-	return &StatusMonitorService{
+func NewStatusMonitorService(storage storage.SensorStorage) *QiVitalsService {
+	return &QiVitalsService{
 		storage: storage,
 	}
 }
 
-func (s *StatusMonitorService) RegisterSensor(ctx context.Context, req *v1.RegisterSensorRequest) (*v1.RegisterSensorResponse, error) {
+func (s *QiVitalsService) RegisterSensor(ctx context.Context, req *v1.RegisterSensorRequest) (*v1.RegisterSensorResponse, error) {
 	if req.Sensor == nil || req.Sensor.Metadata == nil || req.Sensor.Spec == nil {
 		return nil, errors.New("sensor metadata and spec are required")
 	}
@@ -59,7 +59,7 @@ func (s *StatusMonitorService) RegisterSensor(ctx context.Context, req *v1.Regis
 	}, nil
 }
 
-func (s *StatusMonitorService) ReportSensor(ctx context.Context, req *v1.ReportSensorRequest) (*v1.ReportSensorResponse, error) {
+func (s *QiVitalsService) ReportSensor(ctx context.Context, req *v1.ReportSensorRequest) (*v1.ReportSensorResponse, error) {
 	// First resolve ID if natural key was used
 	targetID := req.Id
 	if targetID == "" && req.Namespace != "" && req.Name != "" {
@@ -84,7 +84,7 @@ func (s *StatusMonitorService) ReportSensor(ctx context.Context, req *v1.ReportS
 	}, nil
 }
 
-func (s *StatusMonitorService) DeleteSensor(ctx context.Context, req *v1.DeleteSensorRequest) (*v1.DeleteSensorResponse, error) {
+func (s *QiVitalsService) DeleteSensor(ctx context.Context, req *v1.DeleteSensorRequest) (*v1.DeleteSensorResponse, error) {
 	if err := s.storage.Delete(ctx, req.Id); err != nil {
 		if errors.Is(err, storage.ErrSensorNotFound) {
 			return nil, err // Returning gRPC error is standard
@@ -95,7 +95,7 @@ func (s *StatusMonitorService) DeleteSensor(ctx context.Context, req *v1.DeleteS
 	return &v1.DeleteSensorResponse{}, nil
 }
 
-func (s *StatusMonitorService) QuerySensors(ctx context.Context, req *v1.QuerySensorsRequest) (*v1.QuerySensorsResponse, error) {
+func (s *QiVitalsService) QuerySensors(ctx context.Context, req *v1.QuerySensorsRequest) (*v1.QuerySensorsResponse, error) {
 	filter := storage.QueryFilter{
 		ID:           req.Id,
 		Namespace:    req.Namespace,

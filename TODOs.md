@@ -1,4 +1,4 @@
-One Status page.
+QiVitals page.
 
 Problem: Currently many status pages are asking for status of some endpoint, and only then they report success of failure.
 This approach is limited because such status tools only provide "public" layer.
@@ -8,7 +8,7 @@ The solution is to have periodic "check in" from source providers.
 We can have various signals:
 
 Bot Push signal:
-for example, a script will publish its ok/failure status to "One Status" using its unique key (let's use short ed25519 private/public keys).
+for example, a script will publish its ok/failure status to "QiVitals" using its unique key (let's use short ed25519 private/public keys).
 
 Human push signal:
 a human needs to click "I did this"

@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	v1 "github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
+	v1 "github.com/tomekjarosik/qivitals/gen/api/qivitals/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -41,7 +41,7 @@ func runCLI(t *testing.T, args ...string) (stdout string, stderr string, err err
 
 	// Start with the host's environment, but inject our specific SENSORCLI_URL
 	// so the CLI knows to talk to the test server instead of the default port.
-	cmd.Env = append(cmd.Environ(), "SENSORCLI_URL="+e2eGrpcPort)
+	cmd.Env = append(cmd.Environ(), "QIVITALS_URL="+e2eGrpcPort)
 
 	var outBuf, errBuf bytes.Buffer
 	cmd.Stdout = &outBuf

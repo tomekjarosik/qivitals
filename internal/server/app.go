@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
-	"github.com/tomekjarosik/one-status/internal/middleware"
+	"github.com/tomekjarosik/qivitals/gen/api/qivitals/v1"
+	"github.com/tomekjarosik/qivitals/internal/middleware"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/grpclog"
@@ -22,11 +22,11 @@ import (
 // App represents the composed gRPC + HTTP gateway + Web UI application.
 type App struct {
 	config     Config
-	service    *StatusMonitorService
+	service    *QiVitalsService
 	webHandler http.Handler
 }
 
-func NewApp(cfg Config, svc *StatusMonitorService, webHandler http.Handler) *App {
+func NewApp(cfg Config, svc *QiVitalsService, webHandler http.Handler) *App {
 	return &App{
 		config:     cfg,
 		service:    svc,

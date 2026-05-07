@@ -1,4 +1,4 @@
 version: v1
-name: buf.build/tomekjarosik/one-status  # This name is optional but good practice
+name: buf.build/tomekjarosik/qivitals  # This name is optional but good practice
 deps:
   - buf.build/googleapis/googleapis

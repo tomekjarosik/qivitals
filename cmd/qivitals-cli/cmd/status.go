@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	v1 "github.com/tomekjarosik/one-status/gen/api/statussvc/v1"
+	v1 "github.com/tomekjarosik/qivitals/gen/api/qivitals/v1"
 )
 
 func NewCmdStatus() *cobra.Command {
@@ -20,8 +20,8 @@ func NewCmdStatus() *cobra.Command {
 You can look up a sensor by its unique UUID, or by its human-readable Name and Namespace.
 
 Examples:
-  sensorcli status --name "Daily Backup" --namespace db
-  sensorcli status --id 550e8400-e29b-41d4-a716-446655440000`,
+  qivitals-cli status --name "Daily Backup" --namespace db
+  qivitals-cli status --id 550e8400-e29b-41d4-a716-446655440000`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if sensorID == "" && sensorName == "" {
 				return fmt.Errorf("must provide either --id or --name to identify the sensor")
