@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -68,8 +69,8 @@ func runServe(cmd *cobra.Command, args []string) error {
 	var store storage.SensorStorage
 	if cfg.DatabaseURL == "" {
 		log.Println("WARNING: Using in-memory storage with naive periodic persistence")
-		//store = storage.NewSnapshotStorage(storage.NewMemorySensorStorage(), "onstatus.data", 5*time.Second)
-		store = storage.NewMemorySensorStorage()
+		store = storage.NewSnapshotStorage(storage.NewMemorySensorStorage(), "onstatus.data", 5*time.Second)
+		//store = storage.NewMemorySensorStorage()
 	} else {
 		dbPool, err := database.NewPostgresPool(ctx, cfg.DatabaseURL, cfg.MaxConns)
 		if err != nil {
