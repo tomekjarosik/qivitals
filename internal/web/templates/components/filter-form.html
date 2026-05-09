@@ -1,80 +1,77 @@
 {{define "filter-form"}}
 <form method="GET" action="/"
-	  class="mb-10 rounded-2xl bg-white/90 backdrop-blur border border-slate-200/60 shadow-sm"
-	  x-data="{
-        advanced: false,
-        labels: {{ .LabelsJSON }},
-        init() {
-          const params = new URLSearchParams(window.location.search);
-          const urlLabels = {};
-          for (const [key, value] of params.entries()) {
-            if (key.startsWith('labels[') && key.endsWith(']')) {
-              const k = key.slice(7, -1);
-              if (k !== '') urlLabels[k] = value;
-            }
-          }
-          for (const k in urlLabels) {
-            this.labels.push({ key: k, value: urlLabels[k] });
-          }
-          this.advanced = this.labels.length > 0 ||
-                          '{{ .HasLabelKeys }}' !== '' ||
-                          '{{ .OrderBy }}' !== '' ||
-                          {{ .OrderDesc }};
-        },
-        addLabel() { this.labels.push({ key: '', value: '' }); },
-        removeLabel(index) { this.labels.splice(index, 1); }
+      class="mb-10 space-y-4"
+      x-data="{
+          labels: {{ .LabelsJSON }},
+          init() {
+              const params = new URLSearchParams(window.location.search);
+              const urlLabels = {};
+              for (const [key, value] of params.entries()) {
+                  if (key.startsWith('labels[') && key.endsWith(']')) {
+                      const k = key.slice(7, -1);
+                      if (k !== '') urlLabels[k] = value;
+                  }
+              }
+              for (const k in urlLabels) {
+                  this.labels.push({ key: k, value: urlLabels[k] });
+              }
+          },
+          addLabel() { this.labels.push({ key: '', value: '' }); },
+          removeLabel(index) { this.labels.splice(index, 1); }
       }">
-	<div class="p-5">
-		<!-- Primary filters -->
+
+	<!-- Primary filters -->
+	<!-- FIX: Added 'relative z-10' so this entire card floats above the Advanced section -->
+	<div class="relative z-10 rounded-2xl bg-white/90 backdrop-blur border border-slate-200/60 shadow-sm p-5">
 		<div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
 			<div class="sm:col-span-3">
 				<label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Namespace</label>
 				<input type="text" name="namespace" value="{{ .Namespace }}" placeholder="e.g. infra"
-					   class="w-full rounded-lg border-slate-300 text-sm p-2.5 focus:border-indigo-400 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 transition-shadow">
+				       class="w-full rounded-lg border-slate-300 text-sm p-2.5 focus:border-indigo-400 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 transition-shadow">
 			</div>
 			<div class="sm:col-span-3">
 				<label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Search</label>
 				<input type="text" name="search" value="{{ .Search }}" placeholder="in name or description"
-					   class="w-full rounded-lg border-slate-300 text-sm p-2.5 focus:border-indigo-400 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 transition-shadow">
+				       class="w-full rounded-lg border-slate-300 text-sm p-2.5 focus:border-indigo-400 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 transition-shadow">
 			</div>
 			<div class="sm:col-span-2">
 				<label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Name</label>
 				<input type="text" name="name" value="{{ .Name }}" placeholder="sensor name"
-					   class="w-full rounded-lg border-slate-300 text-sm p-2.5 focus:border-indigo-400 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 transition-shadow">
+				       class="w-full rounded-lg border-slate-300 text-sm p-2.5 focus:border-indigo-400 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 transition-shadow">
 			</div>
 			<div class="sm:col-span-2">
 				<label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Status</label>
 				<div class="relative" x-data="{ open: false }">
 					<button type="button" @click="open = !open"
-							class="w-full rounded-lg border border-slate-300 bg-white text-sm p-2.5 text-left flex justify-between items-center shadow-sm focus:border-indigo-400 focus:ring focus:ring-indigo-200 transition-shadow">
-            <span class="text-slate-700">
-              {{ if .Statuses }}
-                {{ join .Statuses ", " }}
-              {{ else }}
-                All
-              {{ end }}
-            </span>
+					        class="w-full rounded-lg border border-slate-300 bg-white text-sm p-2.5 text-left flex justify-between items-center shadow-sm focus:border-indigo-400 focus:ring focus:ring-indigo-200 transition-shadow">
+                        <span class="text-slate-700">
+                            {{ if .Statuses }}
+                                {{ join .Statuses ", " }}
+                            {{ else }}
+                                All
+                            {{ end }}
+                        </span>
 						<svg :class="{'rotate-180': open}" class="h-4 w-4 text-slate-400 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
 						</svg>
 					</button>
 					<div x-show="open" @click.away="open = false"
-						 class="absolute z-20 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg p-2 space-y-1">
+					     class="absolute z-50 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg p-2 space-y-1">
 						<label class="flex items-center gap-2 px-2 py-1 text-sm rounded hover:bg-slate-50">
 							<input type="checkbox" name="statuses" value="OK"
-								   {{ if contains .Statuses "OK" }}checked{{ end }}
+							       {{ if contains .Statuses "OK" }}checked{{ end }}
 							class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
 							<span class="text-emerald-700">🟢 OK</span>
 						</label>
 						<label class="flex items-center gap-2 px-2 py-1 text-sm rounded hover:bg-slate-50">
 							<input type="checkbox" name="statuses" value="DEGRADED"
-								   {{ if contains .Statuses "DEGRADED" }}checked{{ end }}
+							       {{ if contains .Statuses "DEGRADED" }}checked{{ end }}
 							class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
 							<span class="text-amber-700">🟡 Degraded</span>
 						</label>
 						<label class="flex items-center gap-2 px-2 py-1 text-sm rounded hover:bg-slate-50">
 							<input type="checkbox" name="statuses" value="DEAD"
-								   {{ if contains .Statuses "DEAD" }}checked{{ end }}
+							       {{ if contains .Statuses "DEAD" }}checked{{ end }}
 							class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
 							<span class="text-rose-700">🔴 Dead</span>
 						</label>
@@ -85,76 +82,72 @@
 			<!-- Buttons -->
 			<div class="sm:col-span-2 flex items-end gap-2">
 				<button type="submit"
-						class="flex-1 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition-colors">
+				        class="flex-1 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition-colors">
 					Filter
 				</button>
 				<a href="/" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium py-2.5 whitespace-nowrap">Clear</a>
-				<button type="button" @click="advanced = !advanced"
-						class="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition-colors whitespace-nowrap"
-						:title="advanced ? 'Hide advanced' : 'Show advanced'">
-					<span x-show="!advanced">⚙️</span>
-					<span x-show="advanced">▲</span>
-				</button>
 			</div>
 		</div>
+	</div>
 
-		<!-- Advanced filters -->
-		<div x-show="advanced" x-collapse class="pt-3 mt-3 border-t border-slate-200/70">
-			<div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
-				<!-- Labels -->
-				<div class="sm:col-span-12">
-					<label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Labels</label>
-					<div class="space-y-2">
-						<template x-for="(label, index) in labels" :key="index">
-							<div class="flex gap-2 items-center">
-								<input type="text" x-model="label.key" placeholder="key"
-									   class="flex-1 rounded-lg border-slate-300 text-sm p-2 focus:border-indigo-400 focus:ring focus:ring-indigo-200 transition-shadow">
-								<span class="text-slate-400">:</span>
-								<input type="text" :name="`labels[${label.key}]`" x-model="label.value" placeholder="value"
-									   class="flex-1 rounded-lg border-slate-300 text-sm p-2 focus:border-indigo-400 focus:ring focus:ring-indigo-200 transition-shadow">
-								<button type="button" @click="removeLabel(index)" class="text-slate-400 hover:text-rose-500">
-									<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-									</svg>
-								</button>
-							</div>
-						</template>
-						<button type="button" @click="addLabel"
-								class="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1">
-							+ Add label filter
-						</button>
-					</div>
+	<!-- Advanced filters -->
+	<!-- Note: This card is now z-index: auto (0), so it sits below the Primary card -->
+	<div class="rounded-2xl bg-white/90 backdrop-blur border border-slate-200/60 shadow-sm p-5">
+		<h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Advanced Filters</h3>
+		<div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
+			<!-- Labels -->
+			<div class="sm:col-span-12">
+				<label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Labels</label>
+				<div class="space-y-2">
+					<template x-for="(label, index) in labels" :key="index">
+						<div class="flex gap-2 items-center">
+							<input type="text" x-model="label.key" placeholder="key"
+							       class="flex-1 rounded-lg border-slate-300 text-sm p-2 focus:border-indigo-400 focus:ring focus:ring-indigo-200 transition-shadow">
+							<span class="text-slate-400">:</span>
+							<input type="text" :name="`labels[${label.key}]`" x-model="label.value" placeholder="value"
+							       class="flex-1 rounded-lg border-slate-300 text-sm p-2 focus:border-indigo-400 focus:ring focus:ring-indigo-200 transition-shadow">
+							<button type="button" @click="removeLabel(index)" class="text-slate-400 hover:text-rose-500">
+								<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+								</svg>
+							</button>
+						</div>
+					</template>
+					<button type="button" @click="addLabel"
+					        class="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1">
+						+ Add label filter
+					</button>
 				</div>
+			</div>
 
-				<!-- has_label_keys -->
-				<div class="sm:col-span-4">
-					<label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Must have label keys</label>
-					<input type="text" name="has_label_keys" value="{{ .HasLabelKeys }}" placeholder="key1,key2"
-						   class="w-full rounded-lg border-slate-300 text-sm p-2.5 focus:border-indigo-400 focus:ring focus:ring-indigo-200 transition-shadow">
-				</div>
+			<!-- has_label_keys -->
+			<div class="sm:col-span-4">
+				<label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Must have label keys</label>
+				<input type="text" name="has_label_keys" value="{{ .HasLabelKeys }}" placeholder="key1,key2"
+				       class="w-full rounded-lg border-slate-300 text-sm p-2.5 focus:border-indigo-400 focus:ring focus:ring-indigo-200 transition-shadow">
+			</div>
 
-				<!-- Order By -->
-				<div class="sm:col-span-3">
-					<label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Order By</label>
-					<select name="order_by"
-							class="w-full rounded-lg border-slate-300 text-sm p-2.5 bg-white focus:border-indigo-400 focus:ring focus:ring-indigo-200 transition-shadow">
-						<option value="" {{ if eq .OrderBy "" }}selected{{ end }}>Default</option>
-						<option value="name" {{ if eq .OrderBy "name" }}selected{{ end }}>Name</option>
-						<option value="namespace" {{ if eq .OrderBy "namespace" }}selected{{ end }}>Namespace</option>
-						<option value="last_updated" {{ if eq .OrderBy "last_updated" }}selected{{ end }}>Last Heartbeat</option>
-						<option value="state" {{ if eq .OrderBy "state" }}selected{{ end }}>Status</option>
-					</select>
-				</div>
+			<!-- Order By -->
+			<div class="sm:col-span-3">
+				<label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Order By</label>
+				<select name="order_by"
+				        class="w-full rounded-lg border-slate-300 text-sm p-2.5 bg-white focus:border-indigo-400 focus:ring focus:ring-indigo-200 transition-shadow">
+					<option value="" {{ if eq .OrderBy "" }}selected{{ end }}>Default</option>
+					<option value="name" {{ if eq .OrderBy "name" }}selected{{ end }}>Name</option>
+					<option value="namespace" {{ if eq .OrderBy "namespace" }}selected{{ end }}>Namespace</option>
+					<option value="last_updated" {{ if eq .OrderBy "last_updated" }}selected{{ end }}>Last Heartbeat</option>
+					<option value="state" {{ if eq .OrderBy "state" }}selected{{ end }}>Status</option>
+				</select>
+			</div>
 
-				<!-- Order Direction -->
-				<div class="sm:col-span-2 flex items-end">
-					<label class="flex items-center gap-2 text-sm text-slate-700 bg-white border border-slate-300 rounded-lg px-3 py-2.5 cursor-pointer hover:bg-slate-50 transition-colors">
-						<input type="checkbox" name="order_desc" value="true"
-							   {{ if .OrderDesc }}checked{{ end }}
-							   class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
-						<span>Desc</span>
-					</label>
-				</div>
+			<!-- Order Direction -->
+			<div class="sm:col-span-2 flex items-end">
+				<label class="flex items-center gap-2 text-sm text-slate-700 bg-white border border-slate-300 rounded-lg px-3 py-2.5 cursor-pointer hover:bg-slate-50 transition-colors">
+					<input type="checkbox" name="order_desc" value="true"
+					       {{ if .OrderDesc }}checked{{ end }}
+					       class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
+					<span>Desc</span>
+				</label>
 			</div>
 		</div>
 	</div>
