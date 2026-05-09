@@ -20,8 +20,8 @@
           removeLabel(index) { this.labels.splice(index, 1); }
       }">
 
+	<input type="hidden" name="filters" value="{{ if .ShowLabelsOnSensorGrid }}1{{ end }}">
 	<!-- Primary filters -->
-	<!-- FIX: Added 'relative z-10' so this entire card floats above the Advanced section -->
 	<div class="relative z-10 rounded-2xl bg-white/90 backdrop-blur border border-slate-200/60 shadow-sm p-5">
 		<div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
 			<div class="sm:col-span-3">

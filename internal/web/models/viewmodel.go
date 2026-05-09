@@ -33,6 +33,7 @@ type SensorCardView struct {
 	FailurePeriodSeconds  int64
 	ReportedData          ReportedDataView
 	LastUpdated           int64
+	ShowLabels            bool
 }
 
 // NamespaceGroupView groups sensors under a namespace.
@@ -43,14 +44,15 @@ type NamespaceGroupView struct {
 
 // FilterView holds current filter selections.
 type FilterView struct {
-	Namespace    string
-	Search       string
-	Name         string
-	Statuses     []string
-	Labels       []LabelEntry // key+value pairs for form rendering
-	HasLabelKeys string
-	OrderBy      string
-	OrderDesc    bool
+	Namespace              string
+	Search                 string
+	Name                   string
+	Statuses               []string
+	Labels                 []LabelEntry // key+value pairs for form rendering
+	HasLabelKeys           string
+	OrderBy                string
+	OrderDesc              bool
+	ShowLabelsOnSensorGrid bool
 }
 
 // LabelEntry is a single key‑value pair for the label filter UI.

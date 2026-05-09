@@ -2,3 +2,6 @@
 gen/
 /qivitals
 /qivitals-cli
+*.log
+*.data
+/tmp/

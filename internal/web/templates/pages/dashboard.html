@@ -52,7 +52,20 @@
     </style>
 </head>
 <body class="bg-gradient-to-br from-slate-50 to-indigo-50/50 min-h-screen font-sans antialiased text-slate-800"
-      x-data="{ filtersOpen: false }">
+      x-data="{
+          filtersOpen: {{ if .Filter.ShowLabelsOnSensorGrid }}true{{ else }}false{{ end }},
+          toggle() {
+              // Update URL and reload page
+              const url = new URL(window.location);
+              // Toggle 'filters' parameter presence
+              if (url.searchParams.has('filters')) {
+                  url.searchParams.delete('filters');
+              } else {
+                  url.searchParams.set('filters', '1');
+              }
+              window.location.href = url.toString();
+          }
+      }">
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <header class="flex flex-col sm:flex-row sm:items-end sm:justify-between mb-8">
         <div>
@@ -67,11 +80,11 @@
             </span>
             <!-- Renamed to "Filters" with toggle behavior -->
             <button type="button"
-                    @click="filtersOpen = !filtersOpen"
+                    @click="toggle()"
                     :class="filtersOpen ? 'bg-amber-600' : 'bg-indigo-600'"
                     class="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:opacity-90 transition-colors">
                 <svg x-show="!filtersOpen" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293.707L3.293 7.293A1 1 0 013 6.586V4z" />
                 </svg>
                 <svg x-show="filtersOpen" x-cloak class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7" />

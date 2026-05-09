@@ -28,6 +28,7 @@ func NewDashboardHandler(renderer web.Renderer, svc v1.StatusServiceServer) *Das
 func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	statuses := q["statuses"]
+	showLabels := q.Get("filters") == "1"
 
 	// Build label entries
 	var labels []models.LabelEntry
@@ -69,6 +70,7 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	for _, s := range resp.Sensors {
 		ns := s.Metadata.Namespace
 		card := sensorToCardView(s)
+		card.ShowLabels = showLabels
 		groupsMap[ns] = append(groupsMap[ns], card)
 	}
 
@@ -83,14 +85,15 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sort.Slice(groups, func(i, j int) bool { return groups[i].Namespace < groups[j].Namespace })
 
 	filter := models.FilterView{
-		Namespace:    q.Get("namespace"),
-		Search:       q.Get("search"),
-		Name:         q.Get("name"),
-		Statuses:     statuses,
-		Labels:       labels,
-		HasLabelKeys: hasLabelKeysStr,
-		OrderBy:      q.Get("order_by"),
-		OrderDesc:    orderDesc,
+		Namespace:              q.Get("namespace"),
+		Search:                 q.Get("search"),
+		Name:                   q.Get("name"),
+		Statuses:               statuses,
+		Labels:                 labels,
+		HasLabelKeys:           hasLabelKeysStr,
+		OrderBy:                q.Get("order_by"),
+		OrderDesc:              orderDesc,
+		ShowLabelsOnSensorGrid: showLabels,
 	}
 
 	empty := models.NewDefaultEmptyState()
@@ -102,7 +105,7 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	pageData := models.DashboardPageView{
 		Now:        time.Now().Format("2006-01-02 15:04:05"),
 		FullURL:    r.URL.RequestURI(),
-		SensorGrid: sensorGridData, // <-- now a single field
+		SensorGrid: sensorGridData,
 		Filter:     filter,
 	}
 
