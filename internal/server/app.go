@@ -90,7 +90,7 @@ func (a *App) Run(ctx context.Context) error {
 // newGRPCServer creates and configures the gRPC server with optional logging interceptor.
 func (a *App) newGRPCServer() *grpc.Server {
 
-	authInterceptor := auth.AuthInterceptor(a.authenticator)
+	authInterceptor := auth.ServerInterceptor(a.authenticator)
 	interceptors := make([]grpc.UnaryServerInterceptor, 0)
 	if a.config.LogFile != "" {
 		interceptors = append(interceptors, middleware.LoggingInterceptor(a.config.LogFile))

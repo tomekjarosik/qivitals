@@ -3,6 +3,8 @@ package web
 import (
 	"html/template"
 	"net/http"
+
+	"github.com/tomekjarosik/qivitals/internal/middleware"
 )
 
 // Router handles the assembly of the HTTP gateway and the Web UI.
@@ -24,5 +26,5 @@ func NewRouter(gateway, dashboard, details http.Handler) http.Handler {
 	mux.Handle("/sensors/{id}", details)
 	mux.Handle("/", dashboard)
 
-	return mux
+	return middleware.InjectMetadata(mux)
 }

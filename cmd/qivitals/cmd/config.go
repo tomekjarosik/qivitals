@@ -10,7 +10,6 @@ import (
 )
 
 var flagConfigFile string
-var flagLocalDebug bool
 
 // initConfig handles configuration loading
 func initConfig() error {
@@ -21,7 +20,7 @@ func initConfig() error {
 		if err != nil {
 			return fmt.Errorf("could not determine home directory: %w", err)
 		}
-		viper.AddConfigPath(path.Join(home, ".onestatus"))
+		viper.AddConfigPath(path.Join(home, ".qivitals"))
 		viper.AddConfigPath(".")
 		viper.SetConfigName("config")
 		viper.SetConfigType("yaml")
@@ -35,16 +34,21 @@ func initConfig() error {
 	// So, if the user sets GRPC_PORT, Viper maps it to "grpc.port" or "grpc-port"
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
 
-	if flagLocalDebug {
-		fmt.Println("Using config file:", viper.ConfigFileUsed())
-		fmt.Println(viper.AllSettings())
-	}
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
 	if err := viper.ReadInConfig(); err != nil {
-		// It's okay if the config file is missing, as long as env vars are present
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+		// Print a clear message instead of silently swallowing.
+		fmt.Fprintf(os.Stderr, "[config] using: %s\n", viper.ConfigFileUsed())
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			fmt.Fprintf(os.Stderr, "[config] no config file found at searched paths\n")
+		} else {
 			return fmt.Errorf("error reading config file: %w", err)
 		}
 	}
 
+	// Always print debug info when --local-debug is passed
+	if viper.GetBool("verbose") {
+		fmt.Println("Config loaded:", viper.ConfigFileUsed())
+		fmt.Println("All settings:", viper.AllSettings())
+	}
 	return nil
 }

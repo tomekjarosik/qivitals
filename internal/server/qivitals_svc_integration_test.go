@@ -23,7 +23,7 @@ func TestIntegration_EndToEndFlow(t *testing.T) {
 	// 2. Start the gRPC server with our service implementation
 	grpcServer := grpc.NewServer()
 	impl := NewStatusMonitorService(storage.NewMemorySensorStorage())
-	v1.RegisterStatusServiceServer(grpcServer, impl)
+	v1.RegisterQiVitalsServiceServer(grpcServer, impl)
 
 	go func() {
 		if err := grpcServer.Serve(listener); err != nil && err != grpc.ErrServerStopped {
@@ -43,7 +43,7 @@ func TestIntegration_EndToEndFlow(t *testing.T) {
 	require.NoError(t, err, "Failed to connect to gRPC server")
 	defer conn.Close()
 
-	client := v1.NewStatusServiceClient(conn)
+	client := v1.NewQiVitalsServiceClient(conn)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 

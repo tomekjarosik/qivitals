@@ -10,5 +10,5 @@ type Config struct {
 	LogFile     string `mapstructure:"log_file"`
 	Verbose     bool   `mapstructure:"verbose"`
 
-	Auth *auth.AuthConfig `mapstructure:"auth"`
+	Auth *auth.UsersConfig `mapstructure:"auth"`
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/tomekjarosik/qivitals/internal/auth"
 	"github.com/tomekjarosik/qivitals/internal/database"
 	"github.com/tomekjarosik/qivitals/internal/server"
 	"github.com/tomekjarosik/qivitals/internal/storage"
@@ -59,7 +60,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	if err := viper.Unmarshal(&cfg); err != nil {
 		return err
 	}
-	if flagLocalDebug {
+	if viper.GetBool("verbose") {
 		fmt.Printf("Server Config: %+v\n", cfg)
 	}
 
@@ -86,19 +87,20 @@ func runServe(cmd *cobra.Command, args []string) error {
 	renderer := web.NewTemplateRenderer()
 
 	// Initialize individual handlers with the templates
-	dashboard := handlers.NewDashboardHandler(renderer, qivitalsSvc)
-	details := handlers.NewSensorDetailsHandler(renderer, qivitalsSvc)
-
-	// Initialize the Gateway (gRPC-to-HTTP)
-	gateway, err := server.NewGatewayHandler(ctx, cfg.GRPCPort)
+	gateway, grpcClient, err := server.NewGatewayHandler(ctx, cfg.GRPCPort)
 	if err != nil {
 		return fmt.Errorf("failed to initialize gateway: %w", err)
 	}
 
-	// Assemble the unified Web Router (The single "web" component)
-	webRouter := web.NewRouter(gateway, dashboard, details)
+	// 2. Pass the CLIENT to the handlers, NOT the raw service qivitalsSvc
+	// This ensures UI actions trigger a gRPC call that hits the middleware
+	dashboard := handlers.NewDashboardHandler(renderer, grpcClient)
+	details := handlers.NewSensorDetailsHandler(renderer, grpcClient)
 
-	// Pass the single webRouter to the App
-	app := server.NewApp(cfg, qivitalsSvc, webRouter)
+	// Assemble the router
+	webRouter := web.NewRouter(gateway, dashboard, details)
+	authenticator := auth.NewAuthenticator(cfg.Auth)
+
+	app := server.NewApp(cfg, qivitalsSvc, webRouter, authenticator)
 	return app.Run(ctx)
 }

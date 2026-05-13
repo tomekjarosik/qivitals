@@ -9,15 +9,22 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	v1 "github.com/tomekjarosik/qivitals/gen/api/qivitals/v1"
+	"github.com/tomekjarosik/qivitals/internal/auth"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
+
+// authToken is set by PersistentPreRunE for every authenticated command.
+var authToken string
 
 // NewQiVitalsClient abstracts the boilerplate of gRPC connection and client creation.
 func NewQiVitalsClient(ctx context.Context) (v1.QiVitalsServiceClient, *grpc.ClientConn, error) {
 	target := viper.GetString("url")
 
-	conn, err := grpc.NewClient(target, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(target,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithUnaryInterceptor(auth.ClientInterceptor(authToken)),
+	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to connect to gRPC server: %w", err)
 	}
@@ -37,7 +44,12 @@ Register sensors, send health check signals, and query sensor statuses all from 
 			if err := initConfig(); err != nil {
 				return fmt.Errorf("failed to initialize config: %v", err)
 			}
-			return nil
+			// Skip auth for commands that don't need it.
+			if !needsAuth(cmd) {
+				return nil
+			}
+
+			return buildAuth()
 		},
 	}
 
@@ -68,6 +80,36 @@ Register sensors, send health check signals, and query sensor statuses all from 
 	)
 
 	return rootCmd
+}
+
+func buildAuth() error {
+	username := viper.GetString("identity.username")
+	if username == "" {
+		return fmt.Errorf("authentication required — specify --user")
+	}
+
+	privKey, _, err := auth.LoadKeyPair(viper.GetString("identity.keyPath"))
+	if err != nil {
+		return fmt.Errorf("discover identity key: %w", err)
+	}
+
+	token, err := auth.GenerateJWT(privKey, username)
+	if err != nil {
+		return fmt.Errorf("generate JWT: %w", err)
+	}
+
+	authToken = token
+	return nil
+}
+
+// needsAuth returns false for commands that don't need authentication.
+func needsAuth(cmd *cobra.Command) bool {
+	switch cmd.Name() {
+	case "generate-keys":
+		return false
+	default:
+		return true
+	}
 }
 
 // Execute runs the provided command and handles signals for graceful shutdown.

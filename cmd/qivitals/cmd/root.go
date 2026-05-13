@@ -35,10 +35,8 @@ and automated endpoint monitoring, all stored in PostgreSQL and served via HTTP/
 		},
 	}
 
-	// Define the --verbose global flag
-	rootCmd.PersistentFlags().BoolVarP(&flagLocalDebug, "verbose", "v", false, "enable verbose output")
-
-	// Bind the verbose flag to Viper
+	var verbose bool
+	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose output")
 	viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
 
 	// Add subcommands
