@@ -33,10 +33,10 @@ Identify the sensor using EITHER its --id OR its --namespace and --name.
 
 Examples:
   # Patch using unique ID
-  qivitals-cli update --id 550e8400-e29b --failure 3600
+  qivitals-cli update --id 550e8400-e29b --failure 1h
 
   # Patch using human-readable Namespace & Name
-  qivitals-cli update --namespace db --name "Daily Backup" --graceful 1800
+  qivitals-cli update --namespace db --name "Daily Backup" --graceful 30m
 
   # Rename a sensor
   qivitals-cli update --namespace infra --name "old-job" --new-name "new-job"`,
@@ -72,7 +72,7 @@ Examples:
 }
 
 func runUpdate(cmd *cobra.Command, sensorID, namespace, sensorName, newName, newNamespace, description string, gracefulDuration, failureDuration time.Duration, labelsToAdd, labelsToRemove []string) error {
-	client, conn, err := NewStatusClient(cmd.Context())
+	client, conn, err := NewQiVitalsClient(cmd.Context())
 	if err != nil {
 		return fmt.Errorf("failed to connect to gRPC server: %w", err)
 	}

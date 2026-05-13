@@ -18,11 +18,11 @@ import (
 
 type DashboardHandler struct {
 	renderer web.Renderer
-	svc      v1.StatusServiceServer
+	client   v1.QiVitalsServiceClient
 }
 
-func NewDashboardHandler(renderer web.Renderer, svc v1.StatusServiceServer) *DashboardHandler {
-	return &DashboardHandler{renderer: renderer, svc: svc}
+func NewDashboardHandler(renderer web.Renderer, client v1.QiVitalsServiceClient) *DashboardHandler {
+	return &DashboardHandler{renderer: renderer, client: client}
 }
 
 func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -59,7 +59,7 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		OrderDesc:    orderDesc,
 	}
 
-	resp, err := h.svc.QuerySensors(r.Context(), req)
+	resp, err := h.client.QuerySensors(r.Context(), req)
 	if err != nil {
 		http.Error(w, "Failed to load sensors", http.StatusInternalServerError)
 		return

@@ -63,7 +63,7 @@ func runRegister(cmd *cobra.Command, _ []string, sensorID, namespace, sensorName
 		return fmt.Errorf("failed to parse labels: %w", err)
 	}
 
-	client, conn, err := NewStatusClient(cmd.Context()) // Assuming you have a helper for this now!
+	client, conn, err := NewQiVitalsClient(cmd.Context()) // Assuming you have a helper for this now!
 	if err != nil {
 		return fmt.Errorf("failed to connect to gRPC server: %w", err)
 	}

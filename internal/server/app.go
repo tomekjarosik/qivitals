@@ -13,10 +13,12 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/tomekjarosik/qivitals/gen/api/qivitals/v1"
+	"github.com/tomekjarosik/qivitals/internal/auth"
 	"github.com/tomekjarosik/qivitals/internal/middleware"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/grpclog"
+	"google.golang.org/grpc/metadata"
 )
 
 // App represents the composed gRPC + HTTP gateway + Web UI application.
@@ -24,13 +26,16 @@ type App struct {
 	config     Config
 	service    *QiVitalsService
 	webHandler http.Handler
+
+	authenticator *auth.Authenticator
 }
 
-func NewApp(cfg Config, svc *QiVitalsService, webHandler http.Handler) *App {
+func NewApp(cfg Config, svc *QiVitalsService, webHandler http.Handler, authenticator *auth.Authenticator) *App {
 	return &App{
-		config:     cfg,
-		service:    svc,
-		webHandler: webHandler,
+		config:        cfg,
+		service:       svc,
+		webHandler:    webHandler,
+		authenticator: authenticator,
 	}
 }
 
@@ -52,7 +57,7 @@ func (a *App) Run(ctx context.Context) error {
 	// Start gRPC
 	go func() {
 		grpclog.Infof("gRPC server listening on %s", a.config.GRPCPort)
-		if err := grpcServer.Serve(grpcListener); err != nil && err != grpc.ErrServerStopped {
+		if err := grpcServer.Serve(grpcListener); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 			log.Fatalf("gRPC server error: %v", err)
 		}
 	}()
@@ -84,30 +89,46 @@ func (a *App) Run(ctx context.Context) error {
 
 // newGRPCServer creates and configures the gRPC server with optional logging interceptor.
 func (a *App) newGRPCServer() *grpc.Server {
-	var opts []grpc.ServerOption
+
+	authInterceptor := auth.AuthInterceptor(a.authenticator)
+	interceptors := make([]grpc.UnaryServerInterceptor, 0)
 	if a.config.LogFile != "" {
-		opts = append(opts, grpc.UnaryInterceptor(middleware.LoggingInterceptor(a.config.LogFile)))
+		interceptors = append(interceptors, middleware.LoggingInterceptor(a.config.LogFile))
 	}
+	interceptors = append(interceptors, authInterceptor)
+	var opts []grpc.ServerOption
+	opts = append(opts, grpc.ChainUnaryInterceptor(interceptors...))
 	grpcServer := grpc.NewServer(opts...)
 
 	// Register the service implementation (the same instance that is used by the dashboard)
-	v1.RegisterStatusServiceServer(grpcServer, a.service)
+	v1.RegisterQiVitalsServiceServer(grpcServer, a.service)
 
 	return grpcServer
 }
 
 // NewGatewayHandler creates a gRPC‑Gateway HTTP handler that forwards requests to the gRPC endpoint.
-func NewGatewayHandler(ctx context.Context, grpcPort string) (http.Handler, error) {
-	mux := runtime.NewServeMux()
+func NewGatewayHandler(ctx context.Context, grpcPort string) (http.Handler, v1.QiVitalsServiceClient, error) {
+	mux := runtime.NewServeMux(
+		runtime.WithMetadata(func(ctx context.Context, r *http.Request) metadata.MD {
+			token := middleware.GetTokenFromRequest(r)
+			return metadata.Pairs("authorization", token)
+		}),
+	)
+
+	// We create a client connection that the Gateway AND the WebUI will use
 	conn, err := grpc.NewClient(
 		grpcPort,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if err := v1.RegisterStatusServiceHandler(ctx, mux, conn); err != nil {
-		return nil, err
+
+	if err := v1.RegisterQiVitalsServiceHandler(ctx, mux, conn); err != nil {
+		return nil, nil, err
 	}
-	return mux, nil
+
+	client := v1.NewQiVitalsServiceClient(conn)
+
+	return mux, client, nil
 }

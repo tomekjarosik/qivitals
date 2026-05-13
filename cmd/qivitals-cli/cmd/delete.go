@@ -14,7 +14,7 @@ func NewCmdDelete() *cobra.Command {
 		Use:   "delete [flags]",
 		Short: "Delete a sensor and all its history",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, conn, err := NewStatusClient(cmd.Context())
+			client, conn, err := NewQiVitalsClient(cmd.Context())
 			if err != nil {
 				return err
 			}

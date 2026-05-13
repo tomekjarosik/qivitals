@@ -111,7 +111,7 @@ message QuerySensorsResponse {
 
 // --- Service Definition ---
 
-service StatusService {
+service QiVitalsService {
 
   rpc RegisterSensor(RegisterSensorRequest) returns (RegisterSensorResponse) {
     option (google.api.http) = {

@@ -13,8 +13,8 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-// NewStatusClient abstracts the boilerplate of gRPC connection and client creation.
-func NewStatusClient(ctx context.Context) (v1.StatusServiceClient, *grpc.ClientConn, error) {
+// NewQiVitalsClient abstracts the boilerplate of gRPC connection and client creation.
+func NewQiVitalsClient(ctx context.Context) (v1.QiVitalsServiceClient, *grpc.ClientConn, error) {
 	target := viper.GetString("url")
 
 	conn, err := grpc.NewClient(target, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -22,7 +22,7 @@ func NewStatusClient(ctx context.Context) (v1.StatusServiceClient, *grpc.ClientC
 		return nil, nil, fmt.Errorf("failed to connect to gRPC server: %w", err)
 	}
 
-	client := v1.NewStatusServiceClient(conn)
+	client := v1.NewQiVitalsServiceClient(conn)
 	return client, conn, nil
 }
 
@@ -64,6 +64,7 @@ Register sensors, send health check signals, and query sensor statuses all from 
 		NewCmdStatus(),
 		NewCmdDelete(),
 		NewCmdUpdate(),
+		NewGenerateKeysCmd(),
 	)
 
 	return rootCmd
@@ -80,13 +81,4 @@ func Execute(rootCmd *cobra.Command) {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
-}
-
-// initConfig handles configuration loading (Placeholder)
-func initConfig() error {
-	viper.SetDefault("url", "localhost:50051")
-	// Add the prefix. Viper will automatically look for QIVITALS_URL
-	viper.SetEnvPrefix("QIVITALS")
-	viper.AutomaticEnv()
-	return nil
 }

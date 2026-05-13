@@ -38,7 +38,7 @@ Examples:
 }
 
 func runStatus(cmd *cobra.Command, _ []string, sensorID, sensorName, namespace string) error {
-	client, conn, err := NewStatusClient(cmd.Context())
+	client, conn, err := NewQiVitalsClient(cmd.Context())
 	if err != nil {
 		return fmt.Errorf("failed to connect to gRPC server: %w", err)
 	}

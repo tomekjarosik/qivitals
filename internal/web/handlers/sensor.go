@@ -15,11 +15,11 @@ import (
 
 type SensorDetailsHandler struct {
 	renderer web.Renderer
-	svc      v1.StatusServiceServer
+	client   v1.QiVitalsServiceClient
 }
 
-func NewSensorDetailsHandler(renderer web.Renderer, svc v1.StatusServiceServer) *SensorDetailsHandler {
-	return &SensorDetailsHandler{renderer: renderer, svc: svc}
+func NewSensorDetailsHandler(renderer web.Renderer, client v1.QiVitalsServiceClient) *SensorDetailsHandler {
+	return &SensorDetailsHandler{renderer: renderer, client: client}
 }
 
 func (h *SensorDetailsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -40,7 +40,7 @@ func (h *SensorDetailsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *SensorDetailsHandler) handleGet(w http.ResponseWriter, r *http.Request, id string) {
-	resp, err := h.svc.QuerySensors(r.Context(), &v1.QuerySensorsRequest{Id: id})
+	resp, err := h.client.QuerySensors(r.Context(), &v1.QuerySensorsRequest{Id: id})
 	if err != nil || len(resp.Sensors) == 0 {
 		http.Error(w, "Sensor not found", http.StatusNotFound)
 		return
@@ -105,14 +105,14 @@ func (h *SensorDetailsHandler) handlePost(w http.ResponseWriter, r *http.Request
 	ops = append(ops, &v1.PatchOperation{Op: "replace", Path: "/spec/failure_period_seconds", Value: string(failureJSON)})
 
 	// Resource version
-	resp, _ := h.svc.QuerySensors(r.Context(), &v1.QuerySensorsRequest{Id: id})
+	resp, _ := h.client.QuerySensors(r.Context(), &v1.QuerySensorsRequest{Id: id})
 	if len(resp.Sensors) == 0 {
 		http.Error(w, "Sensor disappeared", http.StatusNotFound)
 		return
 	}
 	version := resp.Sensors[0].Metadata.ResourceVersion
 
-	_, err := h.svc.PatchSensor(r.Context(), &v1.PatchSensorRequest{
+	_, err := h.client.PatchSensor(r.Context(), &v1.PatchSensorRequest{
 		Id:         id,
 		Version:    version,
 		Operations: ops,
