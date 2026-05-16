@@ -39,7 +39,7 @@ Sensorcli will communicate over gRPC - it must have basic functionality to read,
 # TODOs
 
 Small:
-[ ] - add filters to webUI in a way it also shows labels
+[ ] - fix e2e tests to generate config and not rely on user home config
 
 Long term:
 [ ] - add public key to SensorInfo or hash of a password/token for WebUI

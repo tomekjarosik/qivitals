@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -18,7 +19,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/grpclog"
-	"google.golang.org/grpc/metadata"
 )
 
 // App represents the composed gRPC + HTTP gateway + Web UI application.
@@ -92,9 +92,25 @@ func (a *App) newGRPCServer() *grpc.Server {
 
 	authInterceptor := auth.ServerInterceptor(a.authenticator)
 	interceptors := make([]grpc.UnaryServerInterceptor, 0)
+
+	var logger *slog.Logger
 	if a.config.LogFile != "" {
-		interceptors = append(interceptors, middleware.LoggingInterceptor(a.config.LogFile))
+		logFile, err := os.OpenFile(a.config.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if err != nil {
+			log.Fatalf("failed to open log file: %v", err)
+		}
+		defer logFile.Close()
+		fileHandler := slog.NewJSONHandler(logFile, &slog.HandlerOptions{
+			AddSource: true,
+		})
+		logger = slog.New(fileHandler)
+	} else {
+		consoleHandler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+			AddSource: true,
+		})
+		logger = slog.New(consoleHandler)
 	}
+	interceptors = append(interceptors, middleware.LoggingInterceptor(logger))
 	interceptors = append(interceptors, authInterceptor)
 	var opts []grpc.ServerOption
 	opts = append(opts, grpc.ChainUnaryInterceptor(interceptors...))
@@ -109,10 +125,7 @@ func (a *App) newGRPCServer() *grpc.Server {
 // NewGatewayHandler creates a gRPC‑Gateway HTTP handler that forwards requests to the gRPC endpoint.
 func NewGatewayHandler(ctx context.Context, grpcPort string) (http.Handler, v1.QiVitalsServiceClient, error) {
 	mux := runtime.NewServeMux(
-		runtime.WithMetadata(func(ctx context.Context, r *http.Request) metadata.MD {
-			token := middleware.GetTokenFromRequest(r)
-			return metadata.Pairs("authorization", token)
-		}),
+		runtime.WithMetadata(auth.GatewayToGRPCMetadataAnnotator),
 	)
 
 	// We create a client connection that the Gateway AND the WebUI will use

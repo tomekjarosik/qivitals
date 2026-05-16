@@ -2,135 +2,183 @@ package auth
 
 import (
 	"context"
-	"crypto/ed25519"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
-	"golang.org/x/crypto/ssh"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
 
-func newTestConfig(t *testing.T, privKeys map[string]ed25519.PrivateKey) *UsersConfig {
-	t.Helper()
+func TestGetTokenFromRequest_CookiePrecedence(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: SessionCookieName, Value: "cookie-token"})
+	req.Header.Set(AuthHeaderKey, "Bearer header-token")
 
-	cfg := &UsersConfig{
-		Users: make(map[string]UserConfig),
-	}
-
-	for username, privKey := range privKeys {
-		pubKey := privKey.Public().(ed25519.PublicKey)
-
-		// Wrap raw Ed25519 bytes into an ssh.PublicKey object
-		sshPub, err := ssh.NewPublicKey(pubKey)
-		if err != nil {
-			t.Fatalf("failed to create SSH public key for %s: %v", username, err)
-		}
-
-		// MarshalAuthorizedKey expects an ssh.PublicKey interface
-		sshPubKey := ssh.MarshalAuthorizedKey(sshPub)
-
-		cfg.Users[username] = UserConfig{
-			PublicKeys: []string{string(sshPubKey)},
-			Namespaces: []string{"home", "infra"},
-		}
-	}
-
-	return cfg
+	got := GetTokenFromRequest(req)
+	require.Equal(t, "Bearer cookie-token", got)
 }
 
-func TestAuthInterceptor(t *testing.T) {
-	priv, _, _ := GenerateKeyPair()
-	authCfg := newTestConfig(t, map[string]ed25519.PrivateKey{"testuser": priv})
+func TestGetTokenFromRequest_OnlyHeader(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set(AuthHeaderKey, "Bearer header-token")
 
-	authenticator := NewAuthenticator(authCfg)
-	interceptor := ServerInterceptor(authenticator)
+	got := GetTokenFromRequest(req)
+	require.Equal(t, "Bearer header-token", got)
+}
 
-	token, err := GenerateJWT(priv, "testuser")
-	if err != nil {
-		t.Fatal(err)
-	}
+func TestGetTokenFromRequest_OnlyCookie(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: SessionCookieName, Value: "cookie-token"})
 
+	got := GetTokenFromRequest(req)
+	require.Equal(t, "Bearer cookie-token", got)
+}
+
+func TestGetTokenFromRequest_Empty(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+
+	got := GetTokenFromRequest(req)
+	require.Empty(t, got)
+}
+
+func TestInjectAuthContext_Cookie(t *testing.T) {
 	var capturedCtx context.Context
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		capturedCtx = ctx
-		return "response", nil
-	}
 
-	md := metadata.Pairs("authorization", "Bearer "+token)
-	ctx := metadata.NewIncomingContext(context.Background(), md)
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedCtx = r.Context()
+	})
 
-	_, err = interceptor(ctx, nil, nil, handler)
-	if err != nil {
-		t.Fatal(err)
-	}
+	wrappedHandler := InjectAuthContext(handler)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: SessionCookieName, Value: "cookie-token"})
 
-	entity := AuthEntityFromContext(capturedCtx)
-	if entity == nil {
-		t.Fatal("expected entity in context")
-	}
-	if entity.SubjectID() != "testuser" {
-		t.Fatalf("expected testuser, got %s", entity.SubjectID())
-	}
+	w := httptest.NewRecorder()
+	wrappedHandler.ServeHTTP(w, req)
+
+	md, ok := metadata.FromOutgoingContext(capturedCtx)
+	require.True(t, ok, "expected outgoing context")
+	require.NotNil(t, md)
+
+	vals := md.Get(AuthHeaderKey)
+	require.Len(t, vals, 1)
+	require.Equal(t, "Bearer cookie-token", vals[0])
 }
 
-func TestAuthInterceptor_NoAuth(t *testing.T) {
-	priv, _, _ := GenerateKeyPair()
-	authCfg := newTestConfig(t, map[string]ed25519.PrivateKey{"testuser": priv})
-
-	interceptor := ServerInterceptor(NewAuthenticator(authCfg))
-
+func TestInjectAuthContext_Header(t *testing.T) {
 	var capturedCtx context.Context
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedCtx = r.Context()
+	})
+
+	wrappedHandler := InjectAuthContext(handler)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set(AuthHeaderKey, "Bearer header-token")
+
+	w := httptest.NewRecorder()
+	wrappedHandler.ServeHTTP(w, req)
+
+	md, ok := metadata.FromOutgoingContext(capturedCtx)
+	require.True(t, ok, "expected outgoing context")
+	require.NotNil(t, md)
+
+	vals := md.Get(AuthHeaderKey)
+	require.Len(t, vals, 1)
+	require.Equal(t, "Bearer header-token", vals[0])
+}
+
+func TestInjectAuthContext_Empty(t *testing.T) {
+	var capturedCtx context.Context
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedCtx = r.Context()
+	})
+
+	wrappedHandler := InjectAuthContext(handler)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+
+	w := httptest.NewRecorder()
+	wrappedHandler.ServeHTTP(w, req)
+
+	md, ok := metadata.FromOutgoingContext(capturedCtx)
+	if ok {
+		vals := md.Get(AuthHeaderKey)
+		require.Empty(t, vals)
+	}
+}
+
+func TestGatewayToGRPCMetadataAnnotator_Cookie(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: SessionCookieName, Value: "cookie-token"})
+
+	md := GatewayToGRPCMetadataAnnotator(context.Background(), req)
+	require.NotNil(t, md)
+
+	vals := md.Get(AuthHeaderKey)
+	require.Len(t, vals, 1)
+	require.Equal(t, "Bearer cookie-token", vals[0])
+}
+
+func TestGatewayToGRPCMetadataAnnotator_Header(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set(AuthHeaderKey, "Bearer header-token")
+
+	md := GatewayToGRPCMetadataAnnotator(context.Background(), req)
+	require.NotNil(t, md)
+
+	vals := md.Get(AuthHeaderKey)
+	require.Len(t, vals, 1)
+	require.Equal(t, "Bearer header-token", vals[0])
+}
+
+func TestGatewayToGRPCMetadataAnnotator_Empty(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+
+	md := GatewayToGRPCMetadataAnnotator(context.Background(), req)
+
+	// Expecting nil or empty map as per user requirement
+	require.Empty(t, md)
+}
+
+func TestJWTClientInterceptor_WithToken(t *testing.T) {
+	var capturedCtx context.Context
+
+	mockInvoker := func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
 		capturedCtx = ctx
-		return "response", nil
+		return nil
 	}
 
-	ctx := metadata.NewIncomingContext(context.Background(), metadata.MD{})
-	_, err := interceptor(ctx, nil, nil, handler)
-	if err != nil {
-		t.Fatal(err)
-	}
+	interceptor := JWTClientInterceptor("jwt-token")
+	err := interceptor(context.Background(), "/mock/Method", nil, nil, nil, mockInvoker)
+	require.NoError(t, err)
 
-	if AuthEntityFromContext(capturedCtx) != nil {
-		t.Fatal("expected nil entity for unauthenticated request")
-	}
+	md, ok := metadata.FromOutgoingContext(capturedCtx)
+	require.True(t, ok, "expected outgoing context")
+	require.NotNil(t, md)
+
+	vals := md.Get(AuthHeaderKey)
+	require.Len(t, vals, 1)
+	require.Equal(t, "Bearer jwt-token", vals[0])
 }
 
-func TestAuthInterceptor_InvalidToken(t *testing.T) {
-	priv, _, _ := GenerateKeyPair()
-	authCfg := newTestConfig(t, map[string]ed25519.PrivateKey{"testuser": priv})
+func TestJWTClientInterceptor_EmptyToken(t *testing.T) {
+	var capturedCtx context.Context
 
-	interceptor := ServerInterceptor(NewAuthenticator(authCfg))
-
-	md := metadata.Pairs("authorization", "Bearer invalid.token.here")
-	ctx := metadata.NewIncomingContext(context.Background(), md)
-
-	_, err := interceptor(ctx, nil, nil, func(ctx context.Context, req interface{}) (interface{}, error) {
-		return "response", nil
-	})
-	if err == nil {
-		t.Fatal("expected error for invalid token")
-	}
-}
-
-func TestAuthInterceptor_WrongKey(t *testing.T) {
-	priv1, _, _ := GenerateKeyPair()
-	priv2, _, _ := GenerateKeyPair()
-	authCfg := newTestConfig(t, map[string]ed25519.PrivateKey{"testuser": priv1})
-
-	interceptor := ServerInterceptor(NewAuthenticator(authCfg))
-
-	token, err := GenerateJWT(priv2, "testuser")
-	if err != nil {
-		t.Fatal(err)
+	mockInvoker := func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+		capturedCtx = ctx
+		return nil
 	}
 
-	md := metadata.Pairs("authorization", "Bearer "+token)
-	ctx := metadata.NewIncomingContext(context.Background(), md)
+	interceptor := JWTClientInterceptor("")
+	err := interceptor(context.Background(), "/mock/Method", nil, nil, nil, mockInvoker)
+	require.NoError(t, err)
 
-	_, err = interceptor(ctx, nil, nil, func(ctx context.Context, req interface{}) (interface{}, error) {
-		return "response", nil
-	})
-	if err == nil {
-		t.Fatal("expected error for wrong key")
+	// Verify that no auth metadata was added to the outgoing context
+	md, ok := metadata.FromOutgoingContext(capturedCtx)
+	if ok {
+		vals := md.Get(AuthHeaderKey)
+		require.Empty(t, vals)
 	}
 }

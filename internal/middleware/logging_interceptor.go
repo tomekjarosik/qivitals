@@ -2,38 +2,58 @@ package middleware
 
 import (
 	"context"
-	"fmt"
-	"log"
-	"os"
+	"log/slog"
+	"time"
 
+	"github.com/tomekjarosik/qivitals/internal/canonicallog"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
-// LoggingInterceptor returns a UnaryServerInterceptor that logs request and response as one-liners.
-func LoggingInterceptor(logFilePath string) grpc.UnaryServerInterceptor {
-	// Open the log file in append mode, create it if it doesn't exist
-	f, err := os.OpenFile(logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		// If we can't open the file, fallback to standard logger
-		log.Fatalf("failed to open grpc log file: %v", err)
-	}
-
-	logger := log.New(f, "", log.LstdFlags)
-
+func LoggingInterceptor(logger *slog.Logger) grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,
 		req interface{},
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (interface{}, error) {
+		start := time.Now()
+
+		ctx = canonicallog.NewAccumulator(ctx)
+
 		resp, err := handler(ctx, req)
 
-		// Format the one-liner
-		logLine := fmt.Sprintf("method=%s req=%+v resp=%+v err=%v",
-			info.FullMethod, req, resp, err)
+		statusCode := codes.OK
+		if err != nil {
+			if st, ok := status.FromError(err); ok {
+				statusCode = st.Code()
+			} else {
+				statusCode = codes.Unknown
+			}
+		}
 
-		// Write to the file
-		logger.Println(logLine)
+		baseAttributes := []slog.Attr{
+			slog.String("method", info.FullMethod),
+			slog.Duration("duration", time.Since(start)),
+			slog.Int("status_code", int(statusCode)),
+		}
+
+		if err != nil {
+			baseAttributes = append(baseAttributes, slog.String("error", err.Error()))
+		}
+
+		finalAttrs := baseAttributes
+		if acc := canonicallog.GetAccumulator(ctx); acc != nil {
+			finalAttrs = append(finalAttrs, acc.Fields()...)
+		}
+
+		level := slog.LevelInfo
+		if err != nil {
+			level = slog.LevelError
+		}
+
+		logger.LogAttrs(ctx, level, "canonical_log", finalAttrs...)
 
 		return resp, err
 	}
