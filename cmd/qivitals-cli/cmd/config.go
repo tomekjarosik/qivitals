@@ -9,12 +9,10 @@ import (
 	"github.com/spf13/viper"
 )
 
-var flagConfigFile string
-
 // initConfig handles configuration loading
-func initConfig() error {
-	if flagConfigFile != "" {
-		viper.SetConfigFile(flagConfigFile)
+func initConfig(configFile string) error {
+	if configFile != "" {
+		viper.SetConfigFile(configFile)
 	} else {
 		home, err := os.UserHomeDir()
 		if err != nil {

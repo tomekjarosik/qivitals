@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -18,16 +18,14 @@ import (
 	"github.com/tomekjarosik/qivitals/internal/auth"
 	"github.com/tomekjarosik/qivitals/internal/middleware"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/grpclog"
+	"google.golang.org/grpc/credentials"
 )
 
 // App represents the composed gRPC + HTTP gateway + Web UI application.
 type App struct {
-	config     Config
-	service    *QiVitalsService
-	webHandler http.Handler
-
+	config        Config
+	service       *QiVitalsService
+	webHandler    http.Handler
 	authenticator *auth.Authenticator
 }
 
@@ -40,66 +38,60 @@ func NewApp(cfg Config, svc *QiVitalsService, webHandler http.Handler, authentic
 	}
 }
 
-func (a *App) Run(ctx context.Context) error {
-	var logger *slog.Logger
-	var cleanup func()
-
-	if a.config.LogFile != "" {
-		logFile, err := os.OpenFile(a.config.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-		if err != nil {
-			return fmt.Errorf("failed to open log file: %w", err)
-		}
-
-		fileHandler := slog.NewJSONHandler(logFile, &slog.HandlerOptions{
-			AddSource: true,
-		})
-		logger = slog.New(fileHandler)
-
-		// Define cleanup to run at the end of Run()
-		cleanup = func() {
-			logFile.Close()
-		}
-	} else {
+func setupLogger(logFilePath string) (logger *slog.Logger, cleanup func(), err error) {
+	if logFilePath == "" {
 		consoleHandler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 			AddSource: true,
 		})
-		logger = slog.New(consoleHandler)
+		return slog.New(consoleHandler), nil, nil
 	}
 
-	// Ensure file is closed when Run finishes (whether successful or on error)
-	defer func() {
-		if cleanup != nil {
-			cleanup()
-		}
-	}()
+	logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to open log file: %w", err)
+	}
+	cleanup = func() {
+		logFile.Close()
+	}
+
+	fileHandler := slog.NewJSONHandler(logFile, &slog.HandlerOptions{
+		AddSource: true,
+	})
+	return slog.New(fileHandler), cleanup, nil
+}
+
+func (a *App) Run(ctx context.Context) error {
+	logger, cleanupLogger, err := setupLogger(a.config.LogFile)
+	if err != nil {
+		return fmt.Errorf("failed to setup logger: %w", err)
+	}
+	defer cleanupLogger()
 
 	grpcServer := a.newGRPCServer(logger)
-	grpcListener, err := net.Listen("tcp", a.config.GRPCPort)
-	if err != nil {
-		return err
-	}
+	forwardedHandler := middleware.ForwardedProtoMiddleware(a.webHandler)
+
+	// Multiplex handler: Routing traffic over TLS based on HTTP/2 protocol and Content-Type
+	mixedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
+			grpcServer.ServeHTTP(w, r)
+		} else {
+			forwardedHandler.ServeHTTP(w, r)
+		}
+	})
 
 	httpServer := &http.Server{
-		Addr:    a.config.HTTPPort,
-		Handler: a.webHandler,
+		Addr:    a.config.Address,
+		Handler: mixedHandler,
 	}
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-	// Start gRPC
+	// Start unified Secure Server (HTTPS + gRPC)
 	go func() {
-		grpclog.Infof("gRPC server listening on %s", a.config.GRPCPort)
-		if err := grpcServer.Serve(grpcListener); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
-			log.Fatalf("gRPC server error: %v", err)
-		}
-	}()
-
-	// Start HTTP
-	go func() {
-		grpclog.Infof("HTTP gateway + UI listening on %s", a.config.HTTPPort)
-		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("HTTP server error: %v", err)
+		logger.Info("Secure unified server listening", slog.String("address", a.config.Address))
+		if err := httpServer.ListenAndServeTLS(a.config.TLSCertFile, a.config.TLSKeyFile); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("Server error: %v", err)
 		}
 	}()
 
@@ -128,24 +120,30 @@ func (a *App) newGRPCServer(logger *slog.Logger) *grpc.Server {
 	interceptors = append(interceptors, authInterceptor)
 	var opts []grpc.ServerOption
 	opts = append(opts, grpc.ChainUnaryInterceptor(interceptors...))
+
+	// Create the gRPC server wrapper instance
 	grpcServer := grpc.NewServer(opts...)
 
-	// Register the service implementation (the same instance that is used by the dashboard)
 	v1.RegisterQiVitalsServiceServer(grpcServer, a.service)
 
 	return grpcServer
 }
 
-// NewGatewayHandler creates a gRPC‑Gateway HTTP handler that forwards requests to the gRPC endpoint.
-func NewGatewayHandler(ctx context.Context, grpcPort string) (http.Handler, v1.QiVitalsServiceClient, error) {
+// NewGatewayHandler creates a gRPC-Gateway HTTP handler that forwards requests securely.
+func NewGatewayHandler(ctx context.Context, grpcAddr string, certFile string) (http.Handler, v1.QiVitalsServiceClient, error) {
 	mux := runtime.NewServeMux(
 		runtime.WithMetadata(auth.GatewayToGRPCMetadataAnnotator),
 	)
 
-	// We create a client connection that the Gateway AND the WebUI will use
+	// Since the server is secure, the internal gateway client must trust the certificate
+	creds, err := credentials.NewClientTLSFromFile(certFile, "")
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to load TLS credentials for gateway client: %w", err)
+	}
+
 	conn, err := grpc.NewClient(
-		grpcPort,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpcAddr,
+		grpc.WithTransportCredentials(creds),
 	)
 	if err != nil {
 		return nil, nil, err

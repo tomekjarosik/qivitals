@@ -12,6 +12,7 @@ import (
 
 // InitializeCommands sets up the root command and all subcommands.
 func InitializeCommands() *cobra.Command {
+	var configFile string
 	var rootCmd = &cobra.Command{
 		Use:   "qivitals",
 		Short: "QiVitals - a personal status page system for tracking life signals.",
@@ -24,7 +25,7 @@ and automated endpoint monitoring, all stored in PostgreSQL and served via HTTP/
 		Args:                       cobra.NoArgs,
 		SuggestionsMinimumDistance: 2,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			if err := initConfig(); err != nil {
+			if err := initConfig(configFile); err != nil {
 				return fmt.Errorf("failed to initialize config: %v", err)
 			}
 			return nil
@@ -35,6 +36,8 @@ and automated endpoint monitoring, all stored in PostgreSQL and served via HTTP/
 		},
 	}
 
+	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "", "config file path (YAML)")
+
 	var verbose bool
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose output")
 	viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
@@ -42,7 +45,8 @@ and automated endpoint monitoring, all stored in PostgreSQL and served via HTTP/
 	// Add subcommands
 	rootCmd.AddCommand(
 		NewCmdServe(),
-		// Add your other commands here
+		NewCmdGenerateCerts(),
+		// Add other commands here
 	)
 
 	return rootCmd

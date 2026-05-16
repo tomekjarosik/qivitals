@@ -19,11 +19,11 @@ var authToken string
 
 // NewQiVitalsClient abstracts the boilerplate of gRPC connection and client creation.
 func NewQiVitalsClient(ctx context.Context) (v1.QiVitalsServiceClient, *grpc.ClientConn, error) {
-	target := viper.GetString("url")
+	target := viper.GetString("cli.url")
 
 	conn, err := grpc.NewClient(target,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithUnaryInterceptor(auth.ClientInterceptor(authToken)),
+		grpc.WithUnaryInterceptor(auth.JWTClientInterceptor(authToken)),
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to connect to gRPC server: %w", err)
@@ -34,37 +34,42 @@ func NewQiVitalsClient(ctx context.Context) (v1.QiVitalsServiceClient, *grpc.Cli
 }
 
 // InitializeCommands sets up the root command and all subcommands.
+// InitializeCommands sets up the root command and all subcommands.
 func InitializeCommands() *cobra.Command {
-	var rootCmd = &cobra.Command{
+	var configFile string // will hold the value of --config
+	var verbose bool      // used for binding, but viper reads later
+	var baseURL string
+	var machineOutput bool
+
+	rootCmd := &cobra.Command{
 		Use:   "qivitals-cli",
 		Short: "QiVitals - a CLI for managing and monitoring status signals.",
 		Long: `qivitals-cli is a command-line tool for interacting with the QiVitals service.
 Register sensors, send health check signals, and query sensor statuses all from the terminal.`,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			if err := initConfig(); err != nil {
+			if err := initConfig(configFile); err != nil {
 				return fmt.Errorf("failed to initialize config: %v", err)
 			}
 			// Skip auth for commands that don't need it.
 			if !needsAuth(cmd) {
 				return nil
 			}
-
 			return buildAuth()
 		},
 	}
 
+	// Define the --config flag (short -c) to specify a config file
+	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "", "config file path (YAML)")
+
 	// Define the --verbose global flag
-	var verbose bool
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose output")
 	viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
 
 	// Define the --url global flag for the service endpoint
-	var baseURL string
 	rootCmd.PersistentFlags().StringVar(&baseURL, "url", "localhost:50051", "QiVitals service gRPC endpoint (host:port)")
 	viper.BindPFlag("url", rootCmd.PersistentFlags().Lookup("url"))
 
 	// Define the --machine global flag for JSON output
-	var machineOutput bool
 	rootCmd.PersistentFlags().BoolVarP(&machineOutput, "machine", "m", false, "output response in machine-readable JSON format")
 	viper.BindPFlag("machine", rootCmd.PersistentFlags().Lookup("machine"))
 
@@ -83,12 +88,12 @@ Register sensors, send health check signals, and query sensor statuses all from 
 }
 
 func buildAuth() error {
-	username := viper.GetString("identity.username")
+	username := viper.GetString("cli.identity.username")
 	if username == "" {
 		return fmt.Errorf("authentication required — specify --user")
 	}
 
-	privKey, _, err := auth.LoadKeyPair(viper.GetString("identity.keyPath"))
+	privKey, _, err := auth.LoadKeyPair(viper.GetString("cli.identity.keyPath"))
 	if err != nil {
 		return fmt.Errorf("discover identity key: %w", err)
 	}

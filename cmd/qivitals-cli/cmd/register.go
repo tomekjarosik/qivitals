@@ -92,7 +92,7 @@ func runRegister(cmd *cobra.Command, _ []string, sensorID, namespace, sensorName
 	}
 
 	// In gRPC, returning an object implies success (errors are thrown via err != nil)
-	fmt.Printf("Sensor registered successfully. ID: %s\n", response.Sensor.Metadata.Id)
+	fmt.Printf("%s\n", response.Sensor.Metadata.Id)
 
 	return nil
 }

@@ -19,35 +19,40 @@ import (
 func NewCmdServe() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "serve",
-		Short: "Starts the gRPC and HTTP gateway servers",
-		Long:  "Launches the status service monitoring system with gRPC and an HTTP gateway.",
+		Short: "Starts the secure unified gRPC and HTTP gateway server",
+		Long:  "Launches the status service monitoring system over a single secure TLS port.",
 		RunE:  runServe,
 	}
 
-	// Flags – mapstructure tags in server.Config match these flag names
-	cmd.Flags().String("grpc-port", "localhost:50051", "Address and port for gRPC server")
-	cmd.Flags().String("http-port", "localhost:8088", "Address and port for HTTP gateway and UI")
+	// Consolidate into a single address flag and add TLS cert paths
+	cmd.Flags().String("address", "localhost:8088", "Address and port for both gRPC and HTTP UI")
 	cmd.Flags().String("log-file", "qivitals.log", "Path to log file")
 	cmd.Flags().String("database-url", "", "PostgreSQL connection URL (empty = in-memory storage)")
 	cmd.Flags().Int32("database-max-conns", 10, "Maximum database connections")
+	cmd.Flags().String("tls-cert", "certs/server.crt", "Path to TLS certificate file")
+	cmd.Flags().String("tls-key", "certs/server.key", "Path to TLS private key file")
 
-	err := viper.BindPFlag("grpc_port", cmd.Flags().Lookup("grpc-port"))
+	err := viper.BindPFlag("server.address", cmd.Flags().Lookup("address"))
 	if err != nil {
 		return nil
 	}
-	err = viper.BindPFlag("http_port", cmd.Flags().Lookup("http-port"))
+	err = viper.BindPFlag("server.log_file", cmd.Flags().Lookup("log-file"))
 	if err != nil {
 		return nil
 	}
-	err = viper.BindPFlag("log_file", cmd.Flags().Lookup("log-file"))
+	err = viper.BindPFlag("server.database_url", cmd.Flags().Lookup("database-url"))
 	if err != nil {
 		return nil
 	}
-	err = viper.BindPFlag("database_url", cmd.Flags().Lookup("database-url"))
+	err = viper.BindPFlag("server.database_max_conns", cmd.Flags().Lookup("database-max-conns"))
 	if err != nil {
 		return nil
 	}
-	err = viper.BindPFlag("database_max_conns", cmd.Flags().Lookup("database-max-conns"))
+	err = viper.BindPFlag("server.tls_cert_file", cmd.Flags().Lookup("tls-cert"))
+	if err != nil {
+		return nil
+	}
+	err = viper.BindPFlag("server.tls_key_file", cmd.Flags().Lookup("tls-key"))
 	if err != nil {
 		return nil
 	}
@@ -57,9 +62,10 @@ func NewCmdServe() *cobra.Command {
 
 func runServe(cmd *cobra.Command, args []string) error {
 	var cfg server.Config
-	if err := viper.Unmarshal(&cfg); err != nil {
+	if err := viper.UnmarshalKey("server", &cfg); err != nil {
 		return err
 	}
+
 	if viper.GetBool("verbose") {
 		fmt.Printf("Server Config: %+v\n", cfg)
 	}
@@ -71,7 +77,6 @@ func runServe(cmd *cobra.Command, args []string) error {
 	if cfg.DatabaseURL == "" {
 		log.Println("WARNING: Using in-memory storage with naive periodic persistence")
 		store = storage.NewSnapshotStorage(storage.NewMemorySensorStorage(), "onstatus.data", 5*time.Second)
-		//store = storage.NewMemorySensorStorage()
 	} else {
 		dbPool, err := database.NewPostgresPool(ctx, cfg.DatabaseURL, cfg.MaxConns)
 		if err != nil {
@@ -81,23 +86,18 @@ func runServe(cmd *cobra.Command, args []string) error {
 		store = storage.NewPostgresSensorStorage(dbPool)
 	}
 
-	// Initialize the core service
 	qivitalsSvc := server.NewStatusMonitorService(store)
-
 	renderer := web.NewTemplateRenderer()
 
-	// Initialize individual handlers with the templates
-	gateway, grpcClient, err := server.NewGatewayHandler(ctx, cfg.GRPCPort)
+	// Initialize individual handlers, passing the certificate file path for internal dialing
+	gateway, grpcClient, err := server.NewGatewayHandler(ctx, cfg.Address, cfg.TLSCertFile)
 	if err != nil {
 		return fmt.Errorf("failed to initialize gateway: %w", err)
 	}
 
-	// 2. Pass the CLIENT to the handlers, NOT the raw service qivitalsSvc
-	// This ensures UI actions trigger a gRPC call that hits the middleware
 	dashboard := handlers.NewDashboardHandler(renderer, grpcClient)
 	details := handlers.NewSensorDetailsHandler(renderer, grpcClient)
 
-	// Assemble the router
 	webRouter := web.NewRouter(gateway, dashboard, details)
 	authenticator := auth.NewAuthenticator(cfg.Auth)
 
