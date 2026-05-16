@@ -21,6 +21,8 @@ func NewCmdGenerateCerts() *cobra.Command {
 	var outputDir string
 	var commonName string
 	var validityDays int
+	var extraHostnames []string
+	var extraIPs []string
 
 	cmd := &cobra.Command{
 		Use:   "generate-certs",
@@ -74,6 +76,17 @@ This is more efficient and secure than RSA for TLS connections.`,
 			template.IPAddresses = append(template.IPAddresses, net.ParseIP("::1"))
 			template.DNSNames = append(template.DNSNames, "localhost")
 
+			// Add extra hostnames and IPs from flags
+			for _, h := range extraHostnames {
+				template.DNSNames = append(template.DNSNames, h)
+			}
+			for _, ipStr := range extraIPs {
+				ip := net.ParseIP(ipStr)
+				if ip != nil {
+					template.IPAddresses = append(template.IPAddresses, ip)
+				}
+			}
+
 			// Self-sign the certificate
 			certDERBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
 			if err != nil {
@@ -123,6 +136,8 @@ This is more efficient and secure than RSA for TLS connections.`,
 	cmd.Flags().StringVar(&outputDir, "output", "certs", "Directory to save certificates")
 	cmd.Flags().StringVarP(&commonName, "common-name", "", "localhost", "Common Name (CN) for the certificate")
 	cmd.Flags().IntVar(&validityDays, "days", 365, "Certificate validity in days")
+	cmd.Flags().StringArrayVar(&extraHostnames, "hostname", []string{}, "Additional DNS hostnames for SAN (can be repeated)")
+	cmd.Flags().StringArrayVar(&extraIPs, "ip", []string{}, "Additional IP addresses for SAN (can be repeated)")
 
 	return cmd
 }

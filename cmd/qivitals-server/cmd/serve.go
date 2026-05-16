@@ -86,7 +86,12 @@ func runServe(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		defer dbPool.Close()
-		store = storage.NewPostgresSensorStorage(dbPool)
+		var pgStore = storage.NewPostgresSensorStorage(dbPool)
+		ctx := context.Background()
+		if err := pgStore.InitSchema(ctx); err != nil {
+			log.Fatalf("Failed to initialize database schema: %v", err)
+		}
+		store = pgStore
 	}
 
 	qivitalsSvc := server.NewStatusMonitorService(store)

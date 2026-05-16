@@ -70,7 +70,7 @@ Register sensors, send health check signals, and query sensor statuses all from 
 
 	// Define the --url global flag for the service endpoint
 	rootCmd.PersistentFlags().StringVar(&baseURL, "url", "localhost:50051", "QiVitals service gRPC endpoint (host:port)")
-	viper.BindPFlag("url", rootCmd.PersistentFlags().Lookup("url"))
+	viper.BindPFlag("cli.url", rootCmd.PersistentFlags().Lookup("url"))
 
 	// Define the --machine global flag for JSON output
 	rootCmd.PersistentFlags().BoolVarP(&machineOutput, "machine", "m", false, "output response in machine-readable JSON format")
