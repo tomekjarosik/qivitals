@@ -34,9 +34,9 @@ func LoggingInterceptor(logger *slog.Logger) grpc.UnaryServerInterceptor {
 		}
 
 		baseAttributes := []slog.Attr{
-			slog.String("method", info.FullMethod),
+			slog.String("grpc.method", info.FullMethod),
 			slog.Duration("duration", time.Since(start)),
-			slog.Int("status_code", int(statusCode)),
+			slog.String("grpc.status_code", statusCode.String()),
 		}
 
 		if err != nil {

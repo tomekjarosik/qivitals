@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"log/slog"
 	"net"
@@ -40,7 +41,39 @@ func NewApp(cfg Config, svc *QiVitalsService, webHandler http.Handler, authentic
 }
 
 func (a *App) Run(ctx context.Context) error {
-	grpcServer := a.newGRPCServer()
+	var logger *slog.Logger
+	var cleanup func()
+
+	if a.config.LogFile != "" {
+		logFile, err := os.OpenFile(a.config.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if err != nil {
+			return fmt.Errorf("failed to open log file: %w", err)
+		}
+
+		fileHandler := slog.NewJSONHandler(logFile, &slog.HandlerOptions{
+			AddSource: true,
+		})
+		logger = slog.New(fileHandler)
+
+		// Define cleanup to run at the end of Run()
+		cleanup = func() {
+			logFile.Close()
+		}
+	} else {
+		consoleHandler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+			AddSource: true,
+		})
+		logger = slog.New(consoleHandler)
+	}
+
+	// Ensure file is closed when Run finishes (whether successful or on error)
+	defer func() {
+		if cleanup != nil {
+			cleanup()
+		}
+	}()
+
+	grpcServer := a.newGRPCServer(logger)
 	grpcListener, err := net.Listen("tcp", a.config.GRPCPort)
 	if err != nil {
 		return err
@@ -88,28 +121,9 @@ func (a *App) Run(ctx context.Context) error {
 }
 
 // newGRPCServer creates and configures the gRPC server with optional logging interceptor.
-func (a *App) newGRPCServer() *grpc.Server {
-
+func (a *App) newGRPCServer(logger *slog.Logger) *grpc.Server {
 	authInterceptor := auth.ServerInterceptor(a.authenticator)
 	interceptors := make([]grpc.UnaryServerInterceptor, 0)
-
-	var logger *slog.Logger
-	if a.config.LogFile != "" {
-		logFile, err := os.OpenFile(a.config.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-		if err != nil {
-			log.Fatalf("failed to open log file: %v", err)
-		}
-		defer logFile.Close()
-		fileHandler := slog.NewJSONHandler(logFile, &slog.HandlerOptions{
-			AddSource: true,
-		})
-		logger = slog.New(fileHandler)
-	} else {
-		consoleHandler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-			AddSource: true,
-		})
-		logger = slog.New(consoleHandler)
-	}
 	interceptors = append(interceptors, middleware.LoggingInterceptor(logger))
 	interceptors = append(interceptors, authInterceptor)
 	var opts []grpc.ServerOption
