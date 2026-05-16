@@ -75,8 +75,11 @@ func runServe(cmd *cobra.Command, args []string) error {
 
 	var store storage.SensorStorage
 	if cfg.DatabaseURL == "" {
+		log.Println("WARNING: Using in-memory storage only")
+		store = storage.NewMemorySensorStorage()
+	} else if cfg.DatabaseURL == "naive-file" {
 		log.Println("WARNING: Using in-memory storage with naive periodic persistence")
-		store = storage.NewSnapshotStorage(storage.NewMemorySensorStorage(), "onstatus.data", 5*time.Second)
+		store = storage.NewSnapshotStorage(storage.NewMemorySensorStorage(), "qivitals.data", 5*time.Second)
 	} else {
 		dbPool, err := database.NewPostgresPool(ctx, cfg.DatabaseURL, cfg.MaxConns)
 		if err != nil {

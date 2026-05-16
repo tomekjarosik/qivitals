@@ -1,49 +1,11 @@
-QiVitals page.
-
-Problem: Currently many status pages are asking for status of some endpoint, and only then they report success of failure.
-This approach is limited because such status tools only provide "public" layer.
-We need to design system that will be able to support all possible statuses. From private: does this backup succeeded.
-To physical: did I contact a friend in last 3 months.
-The solution is to have periodic "check in" from source providers.
-We can have various signals:
-
-Bot Push signal:
-for example, a script will publish its ok/failure status to "QiVitals" using its unique key (let's use short ed25519 private/public keys).
-
-Human push signal:
-a human needs to click "I did this"
-
-Pull signal
-this is similar to other status pages, like is that https website working, is TLS cert valid etc
-
-
-We will store a last timestamp of such signal (and also make sure we don't allow for too many writes per second,
-if last timestamp is withing configurable interval like last minute, do not overwrite)
-
-
-Each "Status check" will be fed by one or many "signals". Each "Status check" will have (key,value) 
-pairs associated with it to allow for custom filtering and preparing status checklists.
-
-It must be able to support checklists in daily life, recurring checklist (e.g. are all my receipts paid),
-and automatic. We can then easily prepare a signal from email, which will forward email to one 
-of signal producers and produce a signal like "bill for water has been paid", and then "Bills checklist" will be green
-
-
-
-The project must be in Go. Pages must be as static as possible (eg. generated periodically and served from RAM)
-It must be HTTP gateway, with protobuf and gRPC, and postgres as backend for storage
-
-
-Sensorcli will communicate over gRPC - it must have basic functionality to read,update,list sensors
-
 # TODOs
 
 Small:
-[ ] - database_url: "memory" or "naive-file" or "postgress url"
-
+[ ] - implement sensor conditions (e.g. something that decides if a sensor is green based on its reported data)
 
 
 Long term:
+[ ] - implement system labels (e.g. owner.sys.qivitals, silenced.sys.qivitals)
 [ ] - add public key to SensorInfo or hash of a password/token for WebUI
 [ ] - add sensor data evaluation function to SensorInfo - could be few predefined at first
 [ ] - add functionality to make status "reviewed" / "casual"

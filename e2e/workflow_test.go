@@ -222,7 +222,7 @@ func TestWorkflow_Update_Success(t *testing.T) {
 	defer serverCmd.Process.Kill()
 
 	// 1. Register baseline
-	sensorID := strings.TrimSpace(runCLI(t, "register --namespace production --name web-api --description 'Primary API server' --graceful 1h --failure 2h --label env=prod --label tier=backend"))
+	sensorID := strings.TrimSpace(runCLI(t, "register --namespace staging --name web-api --description 'Primary API server' --graceful 1h --failure 2h --label env=prod --label tier=backend"))
 	require.NotEmpty(t, sensorID)
 
 	// 2. Update
@@ -230,7 +230,7 @@ func TestWorkflow_Update_Success(t *testing.T) {
 	require.Contains(t, out, "updated successfully")
 
 	// 3. Verify
-	queryOut := runCLI(t, "query --namespace production --name web-api")
+	queryOut := runCLI(t, "query --namespace staging --name web-api")
 	var resp v1.QuerySensorsResponse
 	err := protojson.Unmarshal([]byte(queryOut), &resp)
 	require.NoError(t, err)
@@ -242,7 +242,7 @@ func TestWorkflow_Update_Success(t *testing.T) {
 	assert.Equal(t, "prod", updatedSensor.Metadata.Labels["env"])
 
 	// Verify unchanged fields
-	assert.Equal(t, "production", updatedSensor.Metadata.Namespace)
+	assert.Equal(t, "staging", updatedSensor.Metadata.Namespace)
 	assert.Equal(t, "web-api", updatedSensor.Metadata.Name)
 	assert.Equal(t, "backend", updatedSensor.Metadata.Labels["tier"])
 }
@@ -255,4 +255,13 @@ func findSensorByID(sensors []*v1.Sensor, id string) *v1.Sensor {
 		}
 	}
 	return nil
+}
+
+// getNamesFromResponse is a helper to extract sensor names from a query response.
+func getNamesFromResponse(resp *v1.QuerySensorsResponse) []string {
+	var names []string
+	for _, s := range resp.Sensors {
+		names = append(names, s.Metadata.Name)
+	}
+	return names
 }

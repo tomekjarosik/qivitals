@@ -170,6 +170,14 @@ func buildProtoSensor(state *storage.SensorState) *v1.Sensor {
 	}
 }
 
+func (s *QiVitalsService) GetSensor(ctx context.Context, id string) (*v1.Sensor, error) {
+	state, err := s.storage.GetStatus(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return buildProtoSensor(state), nil
+}
+
 func calculateSensorStatus(state *storage.SensorState) string {
 	now := time.Now().Unix()
 	age := now - state.LastUpdated

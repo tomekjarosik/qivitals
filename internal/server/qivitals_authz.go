@@ -5,30 +5,26 @@ import (
 
 	v1 "github.com/tomekjarosik/qivitals/gen/api/qivitals/v1"
 	"github.com/tomekjarosik/qivitals/internal/auth"
+	"github.com/tomekjarosik/qivitals/internal/canonicallog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-// NamespaceResolver resolves the namespace for a sensor by ID.
-type NamespaceResolver interface {
-	GetSensorNamespace(ctx context.Context, id string) (string, error)
+// SensorResolver resolves the namespace for a sensor by ID.
+type SensorResolver interface {
+	GetSensor(ctx context.Context, id string) (*v1.Sensor, error)
 }
 
 // ServiceAuthMiddleware wraps a StatusServiceServer and enforces namespace-level
-// authorization before delegating to the inner service.
+// authorization before delegating to the inner service - this is between server layers
 type ServiceAuthMiddleware struct {
-	inner v1.QiVitalsServiceClient
-	store NamespaceResolver
+	v1.UnimplementedQiVitalsServiceServer
+	inner v1.QiVitalsServiceServer
+	store SensorResolver
 }
 
-func NewAuthorizedService(inner v1.QiVitalsServiceClient, store NamespaceResolver) *ServiceAuthMiddleware {
+func NewAuthorizedService(inner v1.QiVitalsServiceServer, store SensorResolver) *ServiceAuthMiddleware {
 	return &ServiceAuthMiddleware{inner: inner, store: store}
-}
-
-// mustEmbedUnimplementedStatusServiceServer is a sentinel to satisfy the proto
-// generated interface contract. It does nothing.
-func (m *ServiceAuthMiddleware) mustEmbedUnimplementedStatusServiceServer() {
-	// Sentinel — no-op
 }
 
 // RegisterSensor user must have access to the target namespace
@@ -37,6 +33,7 @@ func (m *ServiceAuthMiddleware) RegisterSensor(ctx context.Context, req *v1.Regi
 	if user == nil {
 		return nil, status.Error(codes.Unauthenticated, "registration requires authentication")
 	}
+	canonicallog.AddField(ctx, "entity.subject", user.SubjectID())
 
 	ns := ""
 	if req.Sensor != nil && req.Sensor.Metadata != nil {
@@ -46,6 +43,8 @@ func (m *ServiceAuthMiddleware) RegisterSensor(ctx context.Context, req *v1.Regi
 		ns = "default"
 	}
 
+	canonicallog.AddField(ctx, "namespace", ns)
+
 	if !user.HasAccessToNamespace(ns) {
 		return nil, status.Errorf(codes.PermissionDenied,
 			"user %s cannot register sensor in namespace %s", user.SubjectID(), ns)
@@ -54,81 +53,64 @@ func (m *ServiceAuthMiddleware) RegisterSensor(ctx context.Context, req *v1.Regi
 	return m.inner.RegisterSensor(ctx, req)
 }
 
-// --- ReportSensor: no namespace check needed in new auth model ---
+// ReportSensor no namespace check needed in new auth model ---
 // (Sensors are no longer a token type; report requests use their own auth)
 func (m *ServiceAuthMiddleware) ReportSensor(ctx context.Context, req *v1.ReportSensorRequest) (*v1.ReportSensorResponse, error) {
+	// TODO: Check the namespace
 	return m.inner.ReportSensor(ctx, req)
 }
 
-// --- DeleteSensor: look up target's namespace via NamespaceResolver, then check user access ---
+// DeleteSensor look up target's namespace via NamespaceResolver, then check user access ---
 func (m *ServiceAuthMiddleware) DeleteSensor(ctx context.Context, req *v1.DeleteSensorRequest) (*v1.DeleteSensorResponse, error) {
 	user := auth.AuthEntityFromContext(ctx)
 	if user == nil {
 		return nil, status.Error(codes.Unauthenticated, "deletion requires authentication")
 	}
+	canonicallog.AddField(ctx, "entity.subject", user.SubjectID())
 
-	ns, err := m.store.GetSensorNamespace(ctx, req.Id)
+	sensor, err := m.store.GetSensor(ctx, req.Id)
 	if err != nil {
 		return nil, status.Errorf(codes.NotFound, "sensor %s not found", req.Id)
 	}
 
-	if !user.HasAccessToNamespace(ns) {
+	if !user.HasAccessToNamespace(sensor.Metadata.Namespace) {
 		return nil, status.Errorf(codes.PermissionDenied,
 			"user %s cannot delete sensor in namespace %s",
-			user.SubjectID(), ns)
+			user.SubjectID(), sensor.Metadata.Namespace)
 	}
 
 	return m.inner.DeleteSensor(ctx, req)
 }
 
-// --- PatchSensor: same pattern as DeleteSensor ---
+// PatchSensor same pattern as DeleteSensor
 func (m *ServiceAuthMiddleware) PatchSensor(ctx context.Context, req *v1.PatchSensorRequest) (*v1.PatchSensorResponse, error) {
 	user := auth.AuthEntityFromContext(ctx)
 	if user == nil {
 		return nil, status.Error(codes.Unauthenticated, "patching requires authentication")
 	}
+	canonicallog.AddField(ctx, "entity.subject", user.SubjectID())
 
-	ns, err := m.store.GetSensorNamespace(ctx, req.Id)
+	sensor, err := m.store.GetSensor(ctx, req.Id)
 	if err != nil {
 		return nil, status.Errorf(codes.NotFound, "sensor %s not found", req.Id)
 	}
 
-	if !user.HasAccessToNamespace(ns) {
+	if !user.HasAccessToNamespace(sensor.Metadata.Namespace) {
 		return nil, status.Errorf(codes.PermissionDenied,
 			"user %s cannot patch sensor in namespace %s",
-			user.SubjectID(), ns)
+			user.SubjectID(), sensor.Metadata.Namespace)
 	}
 
 	return m.inner.PatchSensor(ctx, req)
 }
 
-// --- QuerySensors: enforce namespace filter at query time ---
+// QuerySensors enforce the namespace filter at query time ---
 func (m *ServiceAuthMiddleware) QuerySensors(ctx context.Context, req *v1.QuerySensorsRequest) (*v1.QuerySensorsResponse, error) {
 	user := auth.AuthEntityFromContext(ctx)
-
-	// If user specified a namespace, verify they have access.
-	if req.Namespace != "" {
-		if user != nil && !user.HasAccessToNamespace(req.Namespace) {
-			return nil, status.Errorf(codes.PermissionDenied,
-				"user %s not allowed to query namespace %s",
-				user.SubjectID(), req.Namespace)
-		}
+	if user != nil {
+		canonicallog.AddField(ctx, "entity.subject", user.SubjectID())
 	}
-
-	// If user is restricted (not admin), force namespace filter to their allowed set.
-	if user != nil && len(user.Namespaces()) > 0 {
-		if req.Namespace == "" {
-			// User didn't specify a namespace — restrict to their allowed ones.
-			if len(user.Namespaces()) == 1 {
-				req.Namespace = user.Namespaces()[0]
-			} else {
-				// Multi-tenant user: reject ambiguous queries without explicit namespace.
-				return nil, status.Errorf(codes.PermissionDenied,
-					"user %s must specify a namespace (allowed: %v)",
-					user.SubjectID(), user.Namespaces())
-			}
-		}
-	}
+	// TODO: Decide if we need to restrict namespace access
 
 	return m.inner.QuerySensors(ctx, req)
 }

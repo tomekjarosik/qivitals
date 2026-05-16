@@ -116,15 +116,13 @@ func (a *App) Run(ctx context.Context) error {
 func (a *App) newGRPCServer(logger *slog.Logger) *grpc.Server {
 	authInterceptor := auth.ServerInterceptor(a.authenticator)
 	interceptors := make([]grpc.UnaryServerInterceptor, 0)
-	interceptors = append(interceptors, middleware.LoggingInterceptor(logger))
-	interceptors = append(interceptors, authInterceptor)
+	interceptors = append(interceptors, middleware.LoggingInterceptor(logger), authInterceptor)
 	var opts []grpc.ServerOption
 	opts = append(opts, grpc.ChainUnaryInterceptor(interceptors...))
 
-	// Create the gRPC server wrapper instance
 	grpcServer := grpc.NewServer(opts...)
-
-	v1.RegisterQiVitalsServiceServer(grpcServer, a.service)
+	authorizedService := NewAuthorizedService(a.service, a.service)
+	v1.RegisterQiVitalsServiceServer(grpcServer, authorizedService)
 
 	return grpcServer
 }

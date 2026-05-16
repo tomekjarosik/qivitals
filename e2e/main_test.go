@@ -81,7 +81,7 @@ func TestMain(m *testing.M) {
 	keyPathCert := filepath.Join(certDir, "server.key")
 
 	// Ensure all namespaces used in tests are accessible
-	namespaces := []string{"default", "home", "infra", "app", "chores", "temp", "network"}
+	namespaces := []string{"default", "home", "infra", "app", "chores", "temp", "network", "staging"}
 
 	config := map[string]interface{}{
 		"server": map[string]interface{}{
@@ -153,7 +153,7 @@ func startTestServer(t *testing.T) *exec.Cmd {
 }
 
 // runCLI executes the compiled CLI binary. It automatically injects QIVITALS_CONFIG.
-func runCLI(t *testing.T, command string) string {
+func runCLIwithErr(t *testing.T, command string) (string, string) {
 	// Let shlex handle the heavy lifting of bash parsing
 	args, err := shlex.Split(command)
 	if err != nil {
@@ -172,5 +172,11 @@ func runCLI(t *testing.T, command string) string {
 		t.Logf("CLI Error: %s", errBuf.String())
 	}
 
-	return outBuf.String()
+	return outBuf.String(), errBuf.String()
+}
+
+func runCLI(t *testing.T, command string) string {
+	outStr, errStr := runCLIwithErr(t, command)
+	require.Empty(t, errStr, "CLI command failed")
+	return outStr
 }
