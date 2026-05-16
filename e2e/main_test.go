@@ -19,11 +19,23 @@ import (
 const serverAddress = "localhost:50099"
 
 var (
+	tmpBinDir  = "./tmp"
 	serverBin  = "./tmp/test-qivitals-server-bin"
 	cliBin     = "./tmp/test-qivitals-cli-bin"
 	tempDir    string
 	configPath string
 )
+
+func init() {
+	cwd, err := os.Getwd()
+	if err != nil {
+		log.Fatalf("Failed to get working directory: %v", err)
+	}
+	// Use absolute paths to ensure os.Remove works correctly
+	tmpBinDir = filepath.Join(cwd, tmpBinDir)
+	serverBin = filepath.Join(cwd, "tmp", "test-qivitals-bin")
+	cliBin = filepath.Join(cwd, "tmp", "test-qivitals-cli-bin")
+}
 
 func runCmd(cmd *exec.Cmd) error {
 	out, err := cmd.CombinedOutput()
@@ -123,6 +135,22 @@ func TestMain(m *testing.M) {
 	}
 
 	code := m.Run()
+
+	log.Println("Cleaning up test artifacts...")
+
+	if err := os.Remove(cliBin); err != nil {
+		log.Printf("Warning: Failed to remove CLI binary %s: %v", cliBin, err)
+	} else {
+		log.Println("Removed CLI binary")
+	}
+
+	if err := os.Remove(serverBin); err != nil {
+		log.Printf("Warning: Failed to remove server binary %s: %v", serverBin, err)
+	} else {
+		log.Println("Removed server binary")
+	}
+	os.Remove(tmpBinDir)
+
 	os.Exit(code)
 }
 
