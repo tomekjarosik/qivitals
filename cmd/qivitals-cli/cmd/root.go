@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"os"
 	"os/signal"
@@ -11,7 +12,7 @@ import (
 	v1 "github.com/tomekjarosik/qivitals/gen/api/qivitals/v1"
 	"github.com/tomekjarosik/qivitals/internal/auth"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials"
 )
 
 // authToken is set by PersistentPreRunE for every authenticated command.
@@ -22,7 +23,9 @@ func NewQiVitalsClient(ctx context.Context) (v1.QiVitalsServiceClient, *grpc.Cli
 	target := viper.GetString("cli.url")
 
 	conn, err := grpc.NewClient(target,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
+			InsecureSkipVerify: true, // Allows connecting to self-signed TLS endpoints without failing
+		})),
 		grpc.WithUnaryInterceptor(auth.JWTClientInterceptor(authToken)),
 	)
 	if err != nil {

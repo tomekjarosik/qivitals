@@ -39,7 +39,9 @@ Sensorcli will communicate over gRPC - it must have basic functionality to read,
 # TODOs
 
 Small:
-[ ] - fix e2e tests to generate config and not rely on user home config
+[ ] - database_url: "memory" or "naive-file" or "postgress url"
+
+
 
 Long term:
 [ ] - add public key to SensorInfo or hash of a password/token for WebUI

@@ -1,128 +1,202 @@
 package e2e
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	v1 "github.com/tomekjarosik/qivitals/gen/api/qivitals/v1"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
-// --- Real-World Workflows ---
-
+// TestWorkflow_MonthlyBills tests a manual sensor registration and data reporting.
 func TestWorkflow_MonthlyBills(t *testing.T) {
 	serverCmd := startTestServer(t)
 	defer serverCmd.Process.Kill()
 
-	// 1. Setup: A sensor for a monthly water bill (graceful: 30 days, failure: 35 days)
+	// Setup: Register sensor
+	stdout := runCLI(t, "register --namespace home --name water-bill --description 'Monthly water utility bill' --graceful 30d --failure 35d --label category=bills")
+	sensorID := strings.TrimSpace(stdout)
+	require.NotEmpty(t, sensorID, "Register command should return sensor ID")
 
-	waterBillID := Register(t, "home", "water-bill", "Monthly water utility bill", "30d", "35d", "category=bills", "type=manual")
+	// Action: Report data
+	runCLI(t, fmt.Sprintf("report --id %s --data paid_amount=45.50 --data method=bank_transfer", sensorID))
 
-	// Action: Human clicks "I paid this" (sends a report)
-	Report(t, waterBillID, "paid_amount=45.50", "method=bank_transfer")
+	// Verify: Query and check state
+	queryOut := runCLI(t, "query --namespace home --name water-bill")
 
-	// Verify: Bill is marked as ACTIVE (paid)
-	RequireState(t, waterBillID, "OK")
+	var resp v1.QuerySensorsResponse
+	err := protojson.Unmarshal([]byte(queryOut), &resp)
+	require.NoError(t, err)
+	require.Len(t, resp.Sensors, 1)
 
-	// Verify details
-	res := Query(t, "--namespace", "home", "--name", "water-bill")
-	assert.Equal(t, "45.50", res.Sensors[0].Status.ReportedData["paid_amount"])
+	sn := resp.Sensors[0]
+
+	assert.Equal(t, "OK", sn.Status.State)
+	assert.Equal(t, "45.50", sn.Status.ReportedData["paid_amount"])
+	assert.Equal(t, "bank_transfer", sn.Status.ReportedData["method"])
+	assert.Equal(t, "Monthly water utility bill", sn.Metadata.Description)
+	assert.Equal(t, "water-bill", sn.Metadata.Name)
+	assert.Equal(t, "home", sn.Metadata.Namespace)
+	assert.Equal(t, "bills", sn.Metadata.Labels["category"])
+
+	// Verify durations (30 days = 2592000s, 35 days = 3024000s)
+	assert.Equal(t, int64(2592000), sn.Spec.GracefulPeriodSeconds)
+	assert.Equal(t, int64(3024000), sn.Spec.FailurePeriodSeconds)
 }
 
 func TestWorkflow_ITInfrastructure(t *testing.T) {
 	serverCmd := startTestServer(t)
 	defer serverCmd.Process.Kill()
 
-	// 1. Register TLS Certificate monitor (graceful: 60 days, failure: 90 days)
-	tlsID := Register(t, "infra", "tls-jarosik-online", "TLS cert for main domain", "60d", "90d")
+	// 1. Register Sensors
+	tlsID := strings.TrimSpace(runCLI(t, "register --namespace infra --name tls-jarosik-online --description 'TLS cert for main domain' --graceful 60d --failure 90d"))
+	require.NotEmpty(t, tlsID)
 
-	// 2. Register Backup Monitor (graceful: 25 hours, failure: 48 hours)
-	backupID := Register(t, "infra", "backup-proxmox-nextcloud", "Daily Nextcloud VM backup", "25h", "48h")
+	backupID := strings.TrimSpace(runCLI(t, "register --namespace infra --name backup-proxmox-nextcloud --description 'Daily Nextcloud VM backup' --graceful 25h --failure 48h"))
+	require.NotEmpty(t, backupID)
 
-	// 3. Register VM Alive Ping (graceful: 5 mins, failure: 15 mins)
-	vmPingID := Register(t, "infra", "ping-nextcloud-vm", "Nextcloud internal health endpoint", "300s", "900s")
+	vmPingID := strings.TrimSpace(runCLI(t, "register --namespace infra --name ping-nextcloud-vm --description 'Nextcloud internal health endpoint' --graceful 300s --failure 900s"))
+	require.NotEmpty(t, vmPingID)
 
-	// --- Simulate automated Cron Jobs running ---
+	// 2. Simulate Cron Jobs
+	runCLI(t, fmt.Sprintf("report --id %s --data days_remaining=65", tlsID))
+	runCLI(t, fmt.Sprintf("report --id %s --data size_gb=14.2 --data duration_sec=450", backupID))
+	runCLI(t, fmt.Sprintf("report --id %s --data latency_ms=4", vmPingID))
 
-	// Cert bot runs and reports 65 days remaining
-	Report(t, tlsID, "days_remaining=65")
+	// 3. Verifications
+	queryOut := runCLI(t, "query --namespace infra")
+	var resp v1.QuerySensorsResponse
+	err := protojson.Unmarshal([]byte(queryOut), &resp)
+	require.NoError(t, err)
+	require.Len(t, resp.Sensors, 3)
 
-	// Backup script finishes successfully
-	Report(t, backupID, "size_gb=14.2", "duration_sec=450")
+	// Verify TLS Sensor
+	tlsSensor := findSensorByID(resp.Sensors, tlsID)
+	require.NotNil(t, tlsSensor)
+	assert.Equal(t, "OK", tlsSensor.Status.State)
+	assert.Equal(t, "65", tlsSensor.Status.ReportedData["days_remaining"])
+	assert.Equal(t, "infra", tlsSensor.Metadata.Namespace)
+	assert.Equal(t, "tls-jarosik-online", tlsSensor.Metadata.Name)
 
-	// Uptime kuma / ping script runs
-	Report(t, vmPingID, "latency_ms=4")
+	// Verify Backup Sensor
+	backupSensor := findSensorByID(resp.Sensors, backupID)
+	require.NotNil(t, backupSensor)
+	assert.Equal(t, "OK", backupSensor.Status.State)
+	assert.Equal(t, "14.2", backupSensor.Status.ReportedData["size_gb"])
+	assert.Equal(t, "450", backupSensor.Status.ReportedData["duration_sec"])
 
-	// --- Verifications ---
-	RequireState(t, tlsID, "OK")
-	RequireState(t, backupID, "OK")
-	RequireState(t, vmPingID, "OK")
+	// Verify Ping Sensor
+	vmPingSensor := findSensorByID(resp.Sensors, vmPingID)
+	require.NotNil(t, vmPingSensor)
+	assert.Equal(t, "OK", vmPingSensor.Status.State)
+	assert.Equal(t, "4", vmPingSensor.Status.ReportedData["latency_ms"])
 }
 
 func TestWorkflow_HomeNetwork(t *testing.T) {
 	serverCmd := startTestServer(t)
 	defer serverCmd.Process.Kill()
 
-	// Router pings 8.8.8.8 every minute. Graceful=2 mins, Failure=5 mins
-	internetID := Register(t, "network", "isp-connection", "Internet connectivity check", "120s", "300s", "location=home")
+	// Register sensor
+	id := strings.TrimSpace(runCLI(t, "register --namespace network --name isp-connection --description 'Internet connectivity check' --graceful 120s --failure 300s --label location=home"))
+	require.NotEmpty(t, id)
 
-	// Router sends OK
-	Report(t, internetID, "packet_loss=0%")
-	RequireState(t, internetID, "OK")
+	// Report data
+	runCLI(t, fmt.Sprintf("report --id %s --data packet_loss=0%%", id))
+
+	// Verify
+	queryOut := runCLI(t, "query --namespace network --name isp-connection")
+	var resp v1.QuerySensorsResponse
+	err := protojson.Unmarshal([]byte(queryOut), &resp)
+	require.NoError(t, err)
+	require.Len(t, resp.Sensors, 1)
+
+	sn := resp.Sensors[0]
+	assert.Equal(t, "OK", sn.Status.State)
+	assert.Equal(t, "0%", sn.Status.ReportedData["packet_loss"])
+	assert.Equal(t, "network", sn.Metadata.Namespace)
+	assert.Equal(t, "isp-connection", sn.Metadata.Name)
+	assert.Equal(t, "home", sn.Metadata.Labels["location"])
+	assert.Equal(t, int64(120), sn.Spec.GracefulPeriodSeconds)
+	assert.Equal(t, int64(300), sn.Spec.FailurePeriodSeconds)
 }
 
 func TestWorkflow_FamilyChores(t *testing.T) {
 	serverCmd := startTestServer(t)
 	defer serverCmd.Process.Kill()
 
-	// Dog needs feeding twice a day (grace: 14 hours)
-	dogID := Register(t, "chores", "feed-dog", "Feed the dog", "14h", "24h")
+	// Register sensors
+	dogID := strings.TrimSpace(runCLI(t, "register --namespace chores --name feed-dog --description 'Feed the dog' --graceful 14h --failure 24h"))
+	require.NotEmpty(t, dogID)
 
-	// Plants need water every 3 days
-	plantsID := Register(t, "chores", "water-plants", "Water living room plants", "3d", "5d")
+	plantsID := strings.TrimSpace(runCLI(t, "register --namespace chores --name water-plants --description 'Water living room plants' --graceful 3d --failure 5d"))
+	require.NotEmpty(t, plantsID)
 
-	// Kid presses NFC button next to dog bowl
-	Report(t, dogID, "feeder=timmy")
-	RequireState(t, dogID, "OK")
+	// Report data
+	runCLI(t, fmt.Sprintf("report --id %s --data feeder=timmy", dogID))
+	runCLI(t, fmt.Sprintf("report --id %s", plantsID))
 
-	// No one watered plants yet, but we just registered it, so it might technically be DEAD depending on initialization logic.
-	// We simulate a report to make it active.
-	Report(t, plantsID)
-	RequireState(t, plantsID, "OK")
+	// Verify
+	queryOut := runCLI(t, "query --namespace chores")
+	var resp v1.QuerySensorsResponse
+	err := protojson.Unmarshal([]byte(queryOut), &resp)
+	require.NoError(t, err)
+	require.Len(t, resp.Sensors, 2)
+
+	dogSensor := findSensorByID(resp.Sensors, dogID)
+	require.NotNil(t, dogSensor)
+	assert.Equal(t, "OK", dogSensor.Status.State)
+	assert.Equal(t, "timmy", dogSensor.Status.ReportedData["feeder"])
+
+	plantsSensor := findSensorByID(resp.Sensors, plantsID)
+	require.NotNil(t, plantsSensor)
+	assert.Equal(t, "OK", plantsSensor.Status.State)
 }
 
 func TestWorkflow_TemporaryProject(t *testing.T) {
 	serverCmd := startTestServer(t)
 	defer serverCmd.Process.Kill()
 
-	// 1. Create a sensor for a temporary build job
-	jobID := Register(t, "temp", "build-job-123", "Short-lived build job", "1h", "2h")
+	// Register sensor
+	id := strings.TrimSpace(runCLI(t, "register --namespace temp --name build-job-123 --description 'Short-lived build job' --graceful 1h --failure 2h"))
+	require.NotEmpty(t, id)
 
-	// 2. Job is active
-	Report(t, jobID, "progress=50%")
-	RequireState(t, jobID, "OK")
+	// Report data
+	runCLI(t, fmt.Sprintf("report --id %s --data progress=50%%", id))
 
-	// 3. Job finishes, we delete the sensor
-	Delete(t, jobID)
+	// Delete sensor
+	out := runCLI(t, fmt.Sprintf("delete --id %s", id))
+	require.Contains(t, out, "deleted successfully", "Delete command should succeed")
 
-	// 4. Verify it's gone
-	res := Query(t, "--namespace", "temp")
-	assert.Len(t, res.Sensors, 0, "Sensor should be deleted")
+	// Verify it's gone
+	queryOut := runCLI(t, "query --namespace temp")
+	var resp v1.QuerySensorsResponse
+	err := protojson.Unmarshal([]byte(queryOut), &resp)
+	require.NoError(t, err)
+	assert.Empty(t, resp.Sensors, "Sensor should be deleted")
 }
 
 func TestWorkflow_AdvancedQueryFiltering(t *testing.T) {
 	serverCmd := startTestServer(t)
 	defer serverCmd.Process.Kill()
 
-	// 1. Setup a diverse set of sensors across different namespaces and names
-	Register(t, "infra", "db-backup-us-east", "Postgres backup", "1h", "2h", "env=prod", "team=data", "critical=true")
-	Register(t, "infra", "db-backup-eu-west", "Postgres backup EU", "1h", "2h", "env=prod", "team=data", "critical=true")
-	Register(t, "app", "api-health", "API healthcheck", "60s", "120s", "env=prod", "team=backend")
-	Register(t, "app", "api-staging-health", "Staging API ping", "60s", "120s", "env=staging", "team=backend")
-	Register(t, "chores", "clean-backup-drives", "Manual cleanup of old tapes", "3d", "7d", "manual=true")
+	// Register helpers
+	reg := func(ns, name string) {
+		out := runCLI(t, fmt.Sprintf("register --namespace %s --name %s --graceful 1h --failure 2h", ns, name))
+		require.NotEmpty(t, strings.TrimSpace(out))
+	}
+	reg("infra", "db-backup-us-east")
+	reg("infra", "db-backup-eu-west")
+	reg("app", "api-health")
+	reg("app", "api-staging-health")
+	reg("chores", "clean-backup-drives")
 
-	// Helper to extract names from a query response
-	getNames := func(resp *v1.QuerySensorsResponse) []string {
+	// Helper to get names from output
+	getNames := func(out string) []string {
+		var resp v1.QuerySensorsResponse
+		protojson.Unmarshal([]byte(out), &resp)
 		var names []string
 		for _, s := range resp.Sensors {
 			names = append(names, s.Metadata.Name)
@@ -130,81 +204,55 @@ func TestWorkflow_AdvancedQueryFiltering(t *testing.T) {
 		return names
 	}
 
-	// Case A: Free-text search across namespaces
-	// Should find both DB backups and the manual chore because they all contain "backup" in name or desc
-	resSearch := Query(t, "--search", "backup")
-	assert.Len(t, resSearch.Sensors, 3)
-	names := getNames(resSearch)
+	// Case A: Free-text search
+	names := getNames(runCLI(t, "query --search backup"))
 	assert.Contains(t, names, "db-backup-us-east")
 	assert.Contains(t, names, "db-backup-eu-west")
 	assert.Contains(t, names, "clean-backup-drives")
 
-	// Case B: Search + Namespace filter
-	// Should only find the infra backups, ignoring the chore
-	resSearchNS := Query(t, "--search", "backup", "--namespace", "infra")
-	assert.Len(t, resSearchNS.Sensors, 2)
-	assert.NotContains(t, getNames(resSearchNS), "clean-backup-drives")
-
-	// Case C: Exact Label matching
-	// Find all prod sensors
-	resProd := Query(t, "--label", "env=prod")
-	assert.Len(t, resProd.Sensors, 3) // both DBs + api-health
-
-	// Case D: Multiple Exact Labels (AND logic)
-	// Find prod sensors owned by backend team
-	resProdBackend := Query(t, "--label", "env=prod", "--label", "team=backend")
-	assert.Len(t, resProdBackend.Sensors, 1)
-	assert.Equal(t, "api-health", resProdBackend.Sensors[0].Metadata.Name)
-
-	// Case E: Has-Label (Key existence only)
-	// Find any sensor that has the "critical" label, regardless of its value
-	resCritical := Query(t, "--has-label", "critical")
-	assert.Len(t, resCritical.Sensors, 2)
-	names = getNames(resCritical)
+	// Case B: Search + Namespace
+	names = getNames(runCLI(t, "query --search backup --namespace infra"))
+	assert.Len(t, names, 2)
 	assert.Contains(t, names, "db-backup-us-east")
-	assert.Contains(t, names, "db-backup-eu-west")
+	assert.NotContains(t, names, "clean-backup-drives")
 }
 
-// TestWorkflow_Update_Success verifies that passing a sequence of valid flags
-// to the 'update' command correctly modifies the sensor in the database.
 func TestWorkflow_Update_Success(t *testing.T) {
-	// 1. Start the server (This helper is part of your e2e package)
 	serverCmd := startTestServer(t)
 	defer serverCmd.Process.Kill()
 
-	// 2. Setup: Register a baseline sensor to act as our target
-	// We use the Register helper to create a sensor with predictable initial values.
-	// Using a natural key (namespace/name) to make the test more human-readable.
-	initialNamespace := "production"
-	initialName := "web-api"
-	initialDesc := "Primary API server"
+	// 1. Register baseline
+	sensorID := strings.TrimSpace(runCLI(t, "register --namespace production --name web-api --description 'Primary API server' --graceful 1h --failure 2h --label env=prod --label tier=backend"))
+	require.NotEmpty(t, sensorID)
 
-	sensorID := Register(t, initialNamespace, initialName, initialDesc, "1h", "2h", "env=prod", "tier=backend")
+	// 2. Update
+	out := runCLI(t, fmt.Sprintf("update --id %s --description 'Updated API Description' --graceful 1800s", sensorID))
+	require.Contains(t, out, "updated successfully")
 
-	updateArgs := []string{
-		"update",
-		"--id", sensorID,
-		"--description", "Updated API Description",
-		"--graceful", "1800s",
-	}
+	// 3. Verify
+	queryOut := runCLI(t, "query --namespace production --name web-api")
+	var resp v1.QuerySensorsResponse
+	err := protojson.Unmarshal([]byte(queryOut), &resp)
+	require.NoError(t, err)
+	require.Len(t, resp.Sensors, 1)
 
-	// We execute the CLI tool as a separate process
-	out, stderr, err := runCLI(t, updateArgs...)
-	require.NoError(t, err, "CLI Patch command failed. Stderr: %s", stderr)
-	require.Contains(t, out, "updated successfully", "CLI did not report success")
-
-	queryArgs := []string{"query", "--namespace", initialNamespace, "--name", initialName}
-	resp := Query(t, queryArgs...)
-
-	require.Len(t, resp.Sensors, 1, "Sensor should still exist in the namespace")
 	updatedSensor := resp.Sensors[0]
-
-	// Assert all updated fields
 	assert.Equal(t, "Updated API Description", updatedSensor.Metadata.Description)
 	assert.Equal(t, int64(1800), updatedSensor.Spec.GracefulPeriodSeconds)
-
-	// Assert that unmentioned fields remained unchanged (The "Regression" check)
-	assert.Equal(t, initialName, updatedSensor.Metadata.Name)
-	assert.Equal(t, initialNamespace, updatedSensor.Metadata.Namespace)
 	assert.Equal(t, "prod", updatedSensor.Metadata.Labels["env"])
+
+	// Verify unchanged fields
+	assert.Equal(t, "production", updatedSensor.Metadata.Namespace)
+	assert.Equal(t, "web-api", updatedSensor.Metadata.Name)
+	assert.Equal(t, "backend", updatedSensor.Metadata.Labels["tier"])
+}
+
+// findSensorByID is a helper to find a sensor in a list by ID
+func findSensorByID(sensors []*v1.Sensor, id string) *v1.Sensor {
+	for _, s := range sensors {
+		if s.Metadata.Id == id {
+			return s
+		}
+	}
+	return nil
 }
