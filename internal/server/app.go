@@ -43,20 +43,20 @@ func setupLogger(logFilePath string) (logger *slog.Logger, cleanup func(), err e
 		consoleHandler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 			AddSource: true,
 		})
-		return slog.New(consoleHandler), nil, nil
+		return slog.New(consoleHandler), func() {}, nil
 	}
 
 	logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to open log file: %w", err)
-	}
-	cleanup = func() {
-		logFile.Close()
+		return nil, func() {}, fmt.Errorf("failed to open log file: %w", err)
 	}
 
 	fileHandler := slog.NewJSONHandler(logFile, &slog.HandlerOptions{
 		AddSource: true,
 	})
+	cleanup = func() {
+		logFile.Close()
+	}
 	return slog.New(fileHandler), cleanup, nil
 }
 
