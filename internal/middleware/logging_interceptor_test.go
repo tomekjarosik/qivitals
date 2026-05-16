@@ -74,13 +74,13 @@ func TestLoggingInterceptor_Succeeds(t *testing.T) {
 	assert.Equal(t, "canonical_log", rec.Message)
 	assert.Equal(t, slog.LevelInfo, rec.Level)
 
-	methodAttr := findAttr(rec, "method")
-	require.NotNil(t, methodAttr, "'method' attribute should be present")
+	methodAttr := findAttr(rec, "grpc.method")
+	require.NotNil(t, methodAttr, "'grpc.method' attribute should be present")
 	assert.Equal(t, expectedMethod, methodAttr.Value.String(), "'method' value should match")
 
-	statusAttr := findAttr(rec, "status_code")
-	require.NotNil(t, statusAttr, "'status_code' attribute should be present")
-	assert.Equal(t, int64(codes.OK), statusAttr.Value.Int64(), "'status_code' should be OK")
+	statusAttr := findAttr(rec, "grpc.status_code")
+	require.NotNil(t, statusAttr, "'grpc.status_code' attribute should be present")
+	assert.Equal(t, "OK", statusAttr.Value.String(), "'grpc.status_code' should be OK")
 
 	assert.Nil(t, findAttr(rec, "error"), "'error' attribute should not be present on success")
 }
@@ -114,9 +114,9 @@ func TestLoggingInterceptor_FailsWithGRPCStatus(t *testing.T) {
 
 	assert.Equal(t, slog.LevelError, rec.Level)
 
-	statusAttr := findAttr(rec, "status_code")
+	statusAttr := findAttr(rec, "grpc.status_code")
 	require.NotNil(t, statusAttr)
-	assert.Equal(t, int64(expectedCode), statusAttr.Value.Int64())
+	assert.Equal(t, "NotFound", statusAttr.Value.String())
 
 	errAttr := findAttr(rec, "error")
 	require.NotNil(t, errAttr)
@@ -142,9 +142,9 @@ func TestLoggingInterceptor_FailsWithNonGRPCError(t *testing.T) {
 	rec := handler.records[0]
 	assert.Equal(t, slog.LevelError, rec.Level)
 
-	statusAttr := findAttr(rec, "status_code")
+	statusAttr := findAttr(rec, "grpc.status_code")
 	require.NotNil(t, statusAttr)
-	assert.Equal(t, int64(codes.Unknown), statusAttr.Value.Int64())
+	assert.Equal(t, "Unknown", statusAttr.Value.String())
 }
 
 func TestLoggingInterceptor_AccumulatesFields(t *testing.T) {

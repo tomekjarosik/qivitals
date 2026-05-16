@@ -19,7 +19,7 @@ import (
 const serverAddress = "localhost:50099"
 
 var (
-	serverBin  = "./tmp/test-qivitals-bin"
+	serverBin  = "./tmp/test-qivitals-server-bin"
 	cliBin     = "./tmp/test-qivitals-cli-bin"
 	tempDir    string
 	configPath string
@@ -43,14 +43,14 @@ func TestMain(m *testing.M) {
 	defer os.RemoveAll(tempDir)
 
 	log.Println("Building CLI binary...")
-	buildCLI := exec.Command("go", "build", "-o", cliBin, "../cmd/qivitals-cli")
+	buildCLI := exec.Command("go", "build", "-o", cliBin, "../cmd/qivitals-cli/")
 	if err := runCmd(buildCLI); err != nil {
 		log.Fatalf("Failed to build CLI: %v", err)
 	}
 	defer os.Remove(cliBin)
 
 	log.Println("Building server binary...")
-	buildServer := exec.Command("go", "build", "-o", serverBin, "../cmd/qivitals/main.go")
+	buildServer := exec.Command("go", "build", "-o", serverBin, "../cmd/qivitals-server/")
 	if err := runCmd(buildServer); err != nil {
 		log.Fatalf("Failed to build server: %v", err)
 	}
