@@ -43,6 +43,7 @@ func InitializeCommands() *cobra.Command {
 	var verbose bool      // used for binding, but viper reads later
 	var baseURL string
 	var machineOutput bool
+	var dryRun bool
 
 	rootCmd := &cobra.Command{
 		Use:   "qivitals-cli",
@@ -50,6 +51,9 @@ func InitializeCommands() *cobra.Command {
 		Long: `qivitals-cli is a command-line tool for interacting with the QiVitals service.
 Register sensors, send health check signals, and query sensor statuses all from the terminal.`,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if dryRun {
+				return nil
+			}
 			if err := initConfig(configFile); err != nil {
 				return fmt.Errorf("failed to initialize config: %v", err)
 			}
@@ -75,6 +79,9 @@ Register sensors, send health check signals, and query sensor statuses all from 
 	// Define the --machine global flag for JSON output
 	rootCmd.PersistentFlags().BoolVarP(&machineOutput, "machine", "m", false, "output response in machine-readable JSON format")
 	viper.BindPFlag("machine", rootCmd.PersistentFlags().Lookup("machine"))
+
+	rootCmd.PersistentFlags().BoolVarP(&dryRun, "dry-run", "d", false, "Collect data without sending to server")
+	viper.BindPFlag("dry-run", rootCmd.PersistentFlags().Lookup("dry-run"))
 
 	// Add subcommands
 	rootCmd.AddCommand(
