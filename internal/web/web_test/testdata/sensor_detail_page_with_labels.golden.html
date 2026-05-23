@@ -1,0 +1,251 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sensor - Sensor With Labels</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.11"></script>
+    <script>
+        function addLabelRow() {
+            const container = document.getElementById('labels-container');
+            const div = document.createElement('div');
+            div.className = 'flex gap-2 items-center';
+            div.innerHTML = `
+                <input type="text" name="label_key" placeholder="key"
+                       class="w-1/3 rounded-md border border-slate-300 px-2 py-1 text-sm">
+                <input type="text" name="label_value" placeholder="value"
+                       class="flex-1 rounded-md border border-slate-300 px-2 py-1 text-sm">
+                <button type="button" onclick="this.parentElement.remove()"
+                        class="text-rose-500 hover:text-rose-700 text-xs">✕</button>
+            `;
+            container.appendChild(div);
+        }
+
+        function addRuleRow() {
+            const container = document.getElementById('rules-container');
+            const emptyState = document.getElementById('rules-empty-state');
+            if (emptyState) emptyState.remove();
+
+            const div = document.createElement('div');
+            div.className = 'rule-row border border-slate-200 rounded-lg p-4 bg-slate-50 relative';
+            div.innerHTML = `
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-xs font-medium text-slate-500">New Rule</span>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-12 gap-3 mb-3">
+                        <div class="md:col-span-2">
+                            <label class="block text-xs font-medium text-slate-500 mb-1">Name</label>
+                            <input type="text" name="rule_name" placeholder="Rule name"
+                                   class="w-full rounded-md border border-slate-300 px-2 py-1 text-sm">
+                        </div>
+                        <div class="md:col-span-3">
+                            <label class="block text-xs font-medium text-slate-500 mb-1">Target State</label>
+                            <input type="text" name="rule_target_state" placeholder="DEGRADED"
+                                   class="w-full rounded-md border border-slate-300 px-2 py-1 text-sm">
+                        </div>
+                        <div class="md:col-span-7">
+                            <label class="block text-xs font-medium text-slate-500 mb-1">Message</label>
+                            <input type="text" name="rule_message" placeholder="Optional message template"
+                                   class="w-full rounded-md border border-slate-300 px-2 py-1 text-sm">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
+                        <div class="md:col-span-12">
+                            <label class="block text-xs font-medium text-slate-500 mb-1">Expression</label>
+                            <input type="text" name="rule_expression" placeholder="double(reported_data['battery']) < 15"
+                                   class="w-full rounded-md border border-slate-300 px-2 py-1 text-sm font-mono text-xs">
+                        </div>
+                    </div>
+                    <div class="mt-2 flex justify-end">
+                        <button type="button" class="text-rose-500 hover:text-rose-700 text-xs"
+                                onclick="removeRuleRow(this)">
+                            ✕ Remove
+                        </button>
+                    </div>
+                `;
+            container.appendChild(div);
+        }
+
+        function removeRuleRow(btn) {
+            const row = btn.closest('.rule-row');
+            if (row) row.remove();
+        }
+    </script>
+</head>
+<body class="bg-gradient-to-br from-slate-50 to-indigo-50/50 min-h-screen font-sans antialiased text-slate-800">
+<div class="max-w-5xl mx-auto px-6 py-12">
+    <a href="/" class="text-sm text-indigo-600 hover:underline mb-8 inline-block">← Back to Dashboard</a>
+    <h1 class="text-3xl font-bold mb-8">Sensor Details</h1>
+
+    <form method="post" class="space-y-8" action="/sensors/test-sensor-labels">
+
+        
+        <section class="bg-white/90 backdrop-blur rounded-xl border border-slate-200/70 p-6 shadow-sm">
+            <h2 class="text-lg font-semibold text-slate-800 mb-4">Metadata</h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-600 mb-1">Name</label>
+                    <input name="name" value="Sensor With Labels" required
+                           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-600 mb-1">Description</label>
+                    <input name="description" value=""
+                           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-600 mb-1">Namespace</label>
+                    <input value="(not changeable)" disabled
+                           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-slate-50">
+                    <p class="text-xs text-slate-400 mt-1">Namespace cannot be changed.</p>
+                </div>
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="text-sm font-medium text-slate-600">Labels</label>
+                        <button type="button" onclick="addLabelRow()"
+                                class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">
+                            + Add label
+                        </button>
+                    </div>
+                    <div id="labels-container" class="space-y-2">
+                        
+                        <div class="flex gap-2 items-center">
+                            <input type="text" name="label_key" value="cost-center"
+                                   class="w-1/3 rounded-md border border-slate-300 px-2 py-1 text-sm">
+                            <input type="text" name="label_value" value="engineering"
+                                   class="flex-1 rounded-md border border-slate-300 px-2 py-1 text-sm">
+                            <button type="button" onclick="this.parentElement.remove()"
+                                    class="text-rose-500 hover:text-rose-700 text-xs">✕</button>
+                        </div>
+                        
+                        <div class="flex gap-2 items-center">
+                            <input type="text" name="label_key" value="environment"
+                                   class="w-1/3 rounded-md border border-slate-300 px-2 py-1 text-sm">
+                            <input type="text" name="label_value" value="production"
+                                   class="flex-1 rounded-md border border-slate-300 px-2 py-1 text-sm">
+                            <button type="button" onclick="this.parentElement.remove()"
+                                    class="text-rose-500 hover:text-rose-700 text-xs">✕</button>
+                        </div>
+                        
+                        <div class="flex gap-2 items-center">
+                            <input type="text" name="label_key" value="team"
+                                   class="w-1/3 rounded-md border border-slate-300 px-2 py-1 text-sm">
+                            <input type="text" name="label_value" value="backend"
+                                   class="flex-1 rounded-md border border-slate-300 px-2 py-1 text-sm">
+                            <button type="button" onclick="this.parentElement.remove()"
+                                    class="text-rose-500 hover:text-rose-700 text-xs">✕</button>
+                        </div>
+                        
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        
+        <section class="bg-white/90 backdrop-blur rounded-xl border border-slate-200/70 p-6 shadow-sm">
+            <h2 class="text-lg font-semibold text-slate-800 mb-4">Spec</h2>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-600 mb-1">Graceful Period (seconds)</label>
+                    <input type="number" name="graceful_period_seconds" value="60"
+                           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-600 mb-1">Failure Period (seconds)</label>
+                    <input type="number" name="failure_period_seconds" value="120"
+                           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                </div>
+            </div>
+            <p class="text-xs text-slate-400 mt-2">Thresholds determine when the sensor becomes DEGRADED or DEAD.</p>
+        </section>
+
+        
+        
+<section id="conditions-section" class="bg-white/90 backdrop-blur rounded-xl border border-slate-200/70 p-6 shadow-sm">
+    <div class="flex items-center justify-between mb-2">
+        <h2 class="text-lg font-semibold text-slate-800">Condition Rules</h2>
+        <button type="button" onclick="addRuleRow()"
+                class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">
+            + Add rule
+        </button>
+    </div>
+    <p class="text-xs text-slate-400 mb-4">
+        Rules use CEL expressions evaluated against <code class="bg-slate-100 px-1 rounded">reported_data</code>.
+        When a rule evaluates to <code class="bg-slate-100 px-1 rounded">true</code>, the sensor state overrides to the target state.
+    </p>
+
+    
+    <div id="rules-container" class="space-y-4">
+        
+        <div id="rules-empty-state" class="p-3 bg-slate-100 rounded-lg text-center">
+            <p class="text-sm text-slate-500">No condition rules configured.</p>
+            <p class="text-xs text-slate-400 mt-1">
+                Add rules to override the sensor's state based on evaluated conditions.
+            </p>
+        </div>
+        
+    </div>
+</section>
+
+
+        
+        <section class="bg-white/90 backdrop-blur rounded-xl border border-slate-200/70 p-6 shadow-sm">
+            <h2 class="text-lg font-semibold text-slate-800 mb-4">Current Status</h2>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <span class="block text-sm font-medium text-slate-600 mb-1">State</span>
+                    <div class="flex items-center gap-2">
+                        <span class="h-2.5 w-2.5 mt-0.5 rounded-full flex-shrink-0 ring-2 bg-emerald-500 ring-emerald-100"></span>
+
+                    </div>
+                </div>
+                <div>
+                    <span class="text-sm text-slate-800">
+                    
+                        <span class="whitespace-nowrap format-timestamp" data-ts="1779577365">
+                            1779577365
+                        </span>
+                    
+                    </span>
+                </div>
+            </div>
+
+            
+
+            
+            <div class="mt-4">
+                <span class="block text-sm font-medium text-slate-600 mb-2">Reported Data</span>
+                <div class="bg-slate-50 rounded-lg border border-slate-200 divide-y divide-slate-200">
+                    
+
+<div class="flex justify-between gap-2 py-0.5">
+    <span class="text-slate-300">battery</span>
+    <span class="font-mono text-green">95</span>
+</div>
+
+<div class="flex justify-between gap-2 py-0.5">
+    <span class="text-slate-300">cpu</span>
+    <span class="font-mono text-green">42</span>
+</div>
+
+
+                </div>
+            </div>
+            
+            
+        </section>
+
+        
+        <div class="flex justify-end gap-4">
+            <a href="/" class="px-4 py-2 text-sm text-slate-600 hover:text-slate-800">Cancel</a>
+            <button type="submit"
+                    class="px-6 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
+                Save Changes
+            </button>
+        </div>
+    </form>
+</div>
+</body>
+</html>
