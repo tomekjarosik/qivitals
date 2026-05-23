@@ -16,33 +16,38 @@
     <div id="rules-container" class="space-y-4">
         {{range $i, $rule := .Sensor.ConditionRules}}
         <div class="rule-row border border-slate-200 rounded-lg p-4 bg-slate-50 relative">
-            <!-- Rule header: name + live evaluation indicator -->
+            <!-- Rule header: index + live evaluation indicator -->
             <div class="flex items-center justify-between mb-3">
                 <span class="text-xs font-medium text-slate-500">Rule #{{$i}}</span>
                 {{template "condition-dot" (conditionFor $byRule $rule.Name)}}
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
-                <div class="md:col-span-3">
+            <!-- Row 1: Name, Target State, Message -->
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-3 mb-3">
+                <div class="md:col-span-2">
                     <label class="block text-xs font-medium text-slate-500 mb-1">Name</label>
                     <input type="text" name="rule_name" value="{{$rule.Name}}"
                            class="w-full rounded-md border border-slate-300 px-2 py-1 text-sm">
                 </div>
-                <div class="md:col-span-4">
-                    <label class="block text-xs font-medium text-slate-500 mb-1">Expression</label>
-                    <input type="text" name="rule_expression" value="{{$rule.Expression}}"
-                           class="w-full rounded-md border border-slate-300 px-2 py-1 text-sm font-mono text-xs">
-                </div>
-                <div class="md:col-span-2">
+                <div class="md:col-span-3">
                     <label class="block text-xs font-medium text-slate-500 mb-1">Target State</label>
                     <input type="text" name="rule_target_state" value="{{$rule.TargetState}}"
                            class="w-full rounded-md border border-slate-300 px-2 py-1 text-sm">
                 </div>
-                <div class="md:col-span-3">
+                <div class="md:col-span-7">
                     <label class="block text-xs font-medium text-slate-500 mb-1">Message</label>
                     <input type="text" name="rule_message" value="{{$rule.MessageTemplate}}"
                            class="w-full rounded-md border border-slate-300 px-2 py-1 text-sm"
                            placeholder="Optional message template">
+                </div>
+            </div>
+
+            <!-- Row 2: Expression (full width) -->
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
+                <div class="md:col-span-12">
+                    <label class="block text-xs font-medium text-slate-500 mb-1">Expression</label>
+                    <input type="text" name="rule_expression" value="{{$rule.Expression}}"
+                           class="w-full rounded-md border border-slate-300 px-2 py-1 text-sm font-mono text-xs">
                 </div>
             </div>
 
