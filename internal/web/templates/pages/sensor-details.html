@@ -22,6 +22,51 @@
             `;
             container.appendChild(div);
         }
+
+        function addRuleRow() {
+            const container = document.getElementById('rules-container');
+            const emptyState = document.getElementById('rules-empty-state');
+            if (emptyState) emptyState.remove();
+
+            const div = document.createElement('div');
+            div.className = 'rule-row border border-slate-200 rounded-lg p-4 bg-slate-50 relative';
+            div.innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
+                    <div class="md:col-span-3">
+                        <label class="block text-xs font-medium text-slate-500 mb-1">Name</label>
+                        <input type="text" name="rule_name" placeholder="Rule name"
+                               class="w-full rounded-md border border-slate-300 px-2 py-1 text-sm">
+                    </div>
+                    <div class="md:col-span-4">
+                        <label class="block text-xs font-medium text-slate-500 mb-1">Expression</label>
+                        <input type="text" name="rule_expression" placeholder="double(reported_data['battery']) < 15"
+                               class="w-full rounded-md border border-slate-300 px-2 py-1 text-sm font-mono text-xs">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-xs font-medium text-slate-500 mb-1">Target State</label>
+                        <input type="text" name="rule_target_state" placeholder="DEGRADED"
+                               class="w-full rounded-md border border-slate-300 px-2 py-1 text-sm">
+                    </div>
+                    <div class="md:col-span-3">
+                        <label class="block text-xs font-medium text-slate-500 mb-1">Message</label>
+                        <input type="text" name="rule_message" placeholder="Optional message template"
+                               class="w-full rounded-md border border-slate-300 px-2 py-1 text-sm">
+                    </div>
+                </div>
+                <div class="mt-2 flex justify-end">
+                    <button type="button" class="text-rose-500 hover:text-rose-700 text-xs"
+                            onclick="removeRuleRow(this)">
+                        ✕ Remove
+                    </button>
+                </div>
+            `;
+            container.appendChild(div);
+        }
+
+        function removeRuleRow(btn) {
+            const row = btn.closest('.rule-row');
+            if (row) row.remove();
+        }
     </script>
 </head>
 <body class="bg-gradient-to-br from-slate-50 to-indigo-50/50 min-h-screen font-sans antialiased text-slate-800">
@@ -29,7 +74,7 @@
     <a href="/" class="text-sm text-indigo-600 hover:underline mb-8 inline-block">← Back to Dashboard</a>
     <h1 class="text-3xl font-bold mb-8">Sensor Details</h1>
 
-    <form method="post" class="space-y-8">
+    <form method="post" class="space-y-8" action="/sensors/{{ .Sensor.ID }}">
 
         <!-- Metadata -->
         <section class="bg-white/90 backdrop-blur rounded-xl border border-slate-200/70 p-6 shadow-sm">
@@ -67,8 +112,7 @@
                             <input type="text" name="label_value" value="{{$v}}"
                                    class="flex-1 rounded-md border border-slate-300 px-2 py-1 text-sm">
                             <button type="button" onclick="this.parentElement.remove()"
-                                    class="text-rose-500 hover:text-rose-700 text-xs">✕
-                            </button>
+                                    class="text-rose-500 hover:text-rose-700 text-xs">✕</button>
                         </div>
                         {{end}}
                     </div>
@@ -83,7 +127,7 @@
                 <div>
                     <label class="block text-sm font-medium text-slate-600 mb-1">Graceful Period (seconds)</label>
                     <input type="number" name="graceful_period_seconds" value="{{ .Sensor.GracefulPeriodSeconds }}"
-                    class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-slate-600 mb-1">Failure Period (seconds)</label>
@@ -94,7 +138,10 @@
             <p class="text-xs text-slate-400 mt-2">Thresholds determine when the sensor becomes DEGRADED or DEAD.</p>
         </section>
 
-        <!-- Status (read‑only) -->
+        <!-- Condition Rules -->
+        {{template "condition-rules" .}}
+
+        <!-- Status (read-only) -->
         <section class="bg-white/90 backdrop-blur rounded-xl border border-slate-200/70 p-6 shadow-sm">
             <h2 class="text-lg font-semibold text-slate-800 mb-4">Current Status</h2>
             <div class="grid grid-cols-2 gap-4">
@@ -102,18 +149,18 @@
                     <span class="block text-sm font-medium text-slate-600 mb-1">State</span>
                     <div class="flex items-center gap-2">
                         {{template "status-badge" .Sensor.Status}}
-                        <span class="text-sm font-medium text-slate-700">Healthy</span>  <!-- optional static label -->
                     </div>
                 </div>
                 <div>
                     <span class="text-sm text-slate-800">
                     {{if .Sensor.LastUpdated}}
-                        {{timeAgo .Sensor.LastUpdated}}
-                        <span class="text-xs text-slate-400">({{.Sensor.LastUpdated}})</span>
+                        <span class="whitespace-nowrap format-timestamp" data-ts="{{.Sensor.LastUpdated}}">
+                            {{.Sensor.LastUpdated}}
+                        </span>
                     {{else}}
                         Never
                     {{end}}
-                </span>
+                    </span>
                 </div>
             </div>
             {{if .Sensor.ReportedData.Data}}
@@ -125,6 +172,14 @@
             </div>
             {{else}}
             <p class="text-sm text-slate-400 mt-2">No reported data yet.</p>
+            {{end}}
+            {{if .Sensor.Conditions}}
+            <div class="mt-4">
+                <span class="block text-sm font-medium text-slate-600 mb-2">Condition Evaluations</span>
+                {{template "conditions-list" .Sensor.Conditions}}
+            </div>
+            {{else if .Sensor.ConditionRules}}
+            <p class="text-xs text-slate-400 mt-4">No condition evaluations yet — rules will be evaluated on next report.</p>
             {{end}}
         </section>
 

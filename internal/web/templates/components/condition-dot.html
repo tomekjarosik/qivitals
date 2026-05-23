@@ -1,0 +1,16 @@
+{{define "condition-dot"}}
+{{/* Input: ConditionView */}}
+<span class="inline-flex items-center gap-1.5"
+      title="{{.Reason}}{{if .Message}}: {{.Message}}{{end}}">
+    {{if eq .Status "True"}}
+    <span class="inline-block w-2 h-2 rounded-full bg-rose-500 ring-2 ring-rose-200"></span>
+    <span class="text-[10px] font-semibold text-rose-700 uppercase">Triggered</span>
+    {{else if eq .Status "False"}}
+    <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-emerald-200"></span>
+    <span class="text-[10px] font-semibold text-emerald-700 uppercase">OK</span>
+    {{else}}
+    <span class="inline-block w-2 h-2 rounded-full bg-slate-400 ring-2 ring-slate-200"></span>
+    <span class="text-[10px] font-semibold text-slate-500 uppercase">Unknown</span>
+    {{end}}
+</span>
+{{end}}

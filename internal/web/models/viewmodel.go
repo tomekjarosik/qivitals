@@ -20,12 +20,25 @@ type LabelPillsView struct {
 type ReportedDataView struct {
 	Data map[string]string
 }
+
+// ConditionRuleView represents a condition rule for editing in the Web UI.
+type ConditionRuleView struct {
+	Name            string
+	Expression      string
+	TargetState     string
+	MessageTemplate string
+}
+
 type ConditionView struct {
 	Type    string
 	Status  string // "True", "False", "Unknown"
 	Reason  string
 	Message string
 }
+
+// ConditionsByName returns conditions indexed by their Type (which matches a rule's Name).
+// Used by the sensor detail page to link each rule to its latest evaluation.
+type ConditionsByName map[string]ConditionView
 
 // SensorCardView is a single sensor card on the dashboard.
 type SensorCardView struct {
@@ -41,6 +54,8 @@ type SensorCardView struct {
 	LastUpdated           int64
 	ShowLabels            bool
 	Conditions            []ConditionView
+	ConditionsByRule      ConditionsByName
+	ConditionRules        []ConditionRuleView
 }
 
 // NamespaceGroupView groups sensors under a namespace.

@@ -11,6 +11,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/tomekjarosik/qivitals/internal/web/models"
 )
 
 //go:embed templates/**/*.html
@@ -54,6 +56,15 @@ func initTemplates() (*template.Template, error) {
 			return slices.Contains(slice, target)
 		},
 		"join": strings.Join,
+		"conditionFor": func(byRule models.ConditionsByName, name string) models.ConditionView {
+			if byRule == nil {
+				return models.ConditionView{Status: "Unknown"}
+			}
+			if c, ok := byRule[name]; ok {
+				return c
+			}
+			return models.ConditionView{Status: "Unknown"}
+		},
 	}
 
 	tmpl, err := template.New("").Funcs(funcs).ParseFS(subFS, "**/*.html")

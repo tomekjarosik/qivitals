@@ -142,6 +142,29 @@ func sensorToCardView(s *v1.Sensor) models.SensorCardView {
 	case "DEAD":
 		bgClass = "bg-rose-50/90"
 	}
+	var rules []models.ConditionRuleView
+
+	for _, r := range s.Spec.Rules {
+		rules = append(rules, models.ConditionRuleView{
+			Name:            r.Name,
+			Expression:      r.Expression,
+			TargetState:     r.TargetState,
+			MessageTemplate: r.MessageTemplate,
+		})
+	}
+	var conditions []models.ConditionView
+	conditionsByRule := make(models.ConditionsByName)
+	for _, c := range s.Status.Conditions {
+		cv := models.ConditionView{
+			Type:    c.Type,
+			Status:  c.Status,
+			Reason:  c.Reason,
+			Message: c.Message,
+		}
+		conditions = append(conditions, cv)
+		conditionsByRule[c.Type] = cv
+	}
+
 	return models.SensorCardView{
 		ID:                    s.Metadata.Id,
 		Name:                  s.Metadata.Name,
@@ -153,6 +176,9 @@ func sensorToCardView(s *v1.Sensor) models.SensorCardView {
 		FailurePeriodSeconds:  s.Spec.FailurePeriodSeconds,
 		ReportedData:          models.ReportedDataView{Data: s.Status.ReportedData},
 		LastUpdated:           s.Status.LastUpdatedTimestamp,
+		ConditionRules:        rules,
+		Conditions:            conditions,
+		ConditionsByRule:      conditionsByRule,
 	}
 }
 

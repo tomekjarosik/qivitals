@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -104,6 +105,14 @@ func (h *SensorDetailsHandler) handlePost(w http.ResponseWriter, r *http.Request
 	failureJSON, _ := json.Marshal(failureVal)
 	ops = append(ops, &v1.PatchOperation{Op: "replace", Path: "/spec/failure_period_seconds", Value: string(failureJSON)})
 
+	// Condition Rules — parsed from parallel form arrays
+	rules := parseConditionRules(r.Form)
+	rulesJSON, _ := json.Marshal(rules)
+	if string(rulesJSON) == "null" {
+		rulesJSON = []byte("[]")
+	}
+	ops = append(ops, &v1.PatchOperation{Op: "replace", Path: "/spec/rules", Value: string(rulesJSON)})
+
 	// Resource version
 	resp, _ := h.client.QuerySensors(r.Context(), &v1.QuerySensorsRequest{Id: id})
 	if len(resp.Sensors) == 0 {
@@ -123,4 +132,35 @@ func (h *SensorDetailsHandler) handlePost(w http.ResponseWriter, r *http.Request
 	}
 
 	http.Redirect(w, r, r.URL.Path, http.StatusSeeOther)
+}
+
+// parseConditionRules extracts condition rules from parallel form arrays.
+// Empty-name entries are silently dropped (acts as "remove" on the client).
+func parseConditionRules(form url.Values) []*v1.ConditionRule {
+	names := form["rule_name"]
+	expressions := form["rule_expression"]
+	targetStates := form["rule_target_state"]
+	messages := form["rule_message"]
+
+	pick := func(arr []string, i int) string {
+		if i < len(arr) {
+			return strings.TrimSpace(arr[i])
+		}
+		return ""
+	}
+
+	rules := make([]*v1.ConditionRule, 0, len(names))
+	for i := range names {
+		name := strings.TrimSpace(names[i])
+		if name == "" {
+			continue
+		}
+		rules = append(rules, &v1.ConditionRule{
+			Name:            name,
+			Expression:      pick(expressions, i),
+			TargetState:     pick(targetStates, i),
+			MessageTemplate: pick(messages, i),
+		})
+	}
+	return rules
 }
