@@ -200,10 +200,10 @@ func buildProtoSensor(state *storage.SensorState, conditions []*v1.Condition) *v
 			Rules:                 state.Info.ConditionRules,
 		},
 		Status: &v1.SensorStatus{
-			State:                computedState,
-			LastUpdatedTimestamp: state.LastUpdated,
-			ReportedData:         state.ReportedData,
-			Conditions:           conditions,
+			State:                 computedState,
+			LastReportedTimestamp: state.LastReportedAt,
+			ReportedData:          state.ReportedData,
+			Conditions:            conditions,
 		},
 	}
 }
@@ -219,7 +219,7 @@ func (s *QiVitalsService) GetSensor(ctx context.Context, id string) (*v1.Sensor,
 
 func calculateSensorStatus(state *storage.SensorState) string {
 	now := time.Now().Unix()
-	age := now - state.LastUpdated
+	age := now - state.LastReportedAt
 
 	if age < state.Info.GracefulPeriod {
 		return "OK"

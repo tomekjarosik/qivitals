@@ -94,7 +94,7 @@ func TestIntegration_EndToEndFlow(t *testing.T) {
 
 	// Check the fields inside the nested Status object
 	assert.Equal(t, "OK", sensor.Status.State, "Sensor should be active after receiving a report")
-	assert.Greater(t, sensor.Status.LastUpdatedTimestamp, int64(0), "Timestamp should be recorded")
+	assert.Greater(t, sensor.Status.LastReportedTimestamp, int64(0), "Timestamp should be recorded")
 
 	// Verify that the reported data was actually saved!
 	assert.Equal(t, "45%", sensor.Status.ReportedData["cpu_usage"], "Reported data should be stored in status")

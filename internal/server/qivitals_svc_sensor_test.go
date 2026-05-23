@@ -88,7 +88,7 @@ func TestSendSensorData(t *testing.T) {
 	sendResp, err := impl.ReportSensor(context.Background(), sendReq)
 	assert.NoError(t, err)
 	assert.NotNil(t, sendResp.Sensor)
-	assert.NotZero(t, sendResp.Sensor.Status.LastUpdatedTimestamp)
+	assert.NotZero(t, sendResp.Sensor.Status.LastReportedTimestamp)
 
 	// Send failure data
 	sendReq2 := &v1.ReportSensorRequest{
@@ -157,7 +157,7 @@ func TestQuerySensors(t *testing.T) {
 	assert.Greater(t, len(queryResp.Sensors), 0)
 	for _, sensor := range queryResp.Sensors {
 		assert.Equal(t, "OK", sensor.Status.State)
-		assert.NotZero(t, sensor.Status.LastUpdatedTimestamp)
+		assert.NotZero(t, sensor.Status.LastReportedTimestamp)
 	}
 
 	// Query all ACTIVE sensors (status filter)
@@ -367,7 +367,7 @@ func TestStatusCalculation(t *testing.T) {
 					GracefulPeriod: tt.gracefulPeriod,
 					FailurePeriod:  tt.failurePeriod,
 				},
-				LastUpdated: lastOk,
+				LastReportedAt: lastOk,
 			}
 
 			status := calculateSensorStatus(state)

@@ -59,8 +59,8 @@ func (m *MemorySensorStorage) Register(ctx context.Context, sensor *SensorInfo) 
 			RegisteredAt:    sensor.RegisteredAt,
 			ConditionRules:  sensor.ConditionRules,
 		},
-		LastUpdated:  sensor.RegisteredAt,
-		ReportedData: make(map[string]string),
+		LastReportedAt: sensor.RegisteredAt,
+		ReportedData:   make(map[string]string),
 	}
 
 	return nil
@@ -107,7 +107,7 @@ func (m *MemorySensorStorage) Patch(ctx context.Context, sensorID string, expect
 		}
 	}
 
-	state.LastUpdated = time.Now().Unix()
+	state.Info.LastSpecUpdatedAt = time.Now().Unix()
 	state.Info.ResourceVersion = uuid.New().String()
 	return nil
 }
@@ -124,7 +124,7 @@ func (m *MemorySensorStorage) SendData(ctx context.Context, sensorID string, met
 
 	now := time.Now().Unix()
 
-	state.LastUpdated = now
+	state.LastReportedAt = now
 	for k, v := range metadata {
 		state.ReportedData[k] = v
 	}
@@ -212,8 +212,8 @@ outer:
 			switch filter.OrderBy {
 			case "name":
 				less = a.Info.Name < b.Info.Name
-			case "last_updated":
-				less = a.LastUpdated < b.LastUpdated
+			case "last_reported":
+				less = a.LastReportedAt < b.LastReportedAt
 			default:
 				// Default to registered time if unknown field
 				less = a.Info.RegisteredAt < b.Info.RegisteredAt

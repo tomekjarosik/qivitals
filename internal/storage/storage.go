@@ -18,23 +18,24 @@ const (
 
 // SensorInfo contains all information about a registered sensor
 type SensorInfo struct {
-	ID              string
-	Namespace       string
-	Name            string
-	ResourceVersion string
-	Description     string
-	GracefulPeriod  int64
-	FailurePeriod   int64
-	Labels          map[string]string
-	RegisteredAt    int64
-	ConditionRules  []*v1.ConditionRule
+	ID                string
+	Namespace         string
+	Name              string
+	ResourceVersion   string
+	Description       string
+	GracefulPeriod    int64
+	FailurePeriod     int64
+	Labels            map[string]string
+	RegisteredAt      int64
+	LastSpecUpdatedAt int64
+	ConditionRules    []*v1.ConditionRule
 }
 
 // SensorState tracks the current state of a sensor
 type SensorState struct {
-	Info         *SensorInfo
-	LastUpdated  int64
-	ReportedData map[string]string
+	Info           *SensorInfo
+	ReportedData   map[string]string
+	LastReportedAt int64
 }
 
 type QueryFilter struct {

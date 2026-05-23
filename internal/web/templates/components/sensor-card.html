@@ -30,11 +30,11 @@
     </div>
     {{end}}
     <div class="mt-0.5 text-[11px] leading-tight text-slate-400">
-        {{if eq $card.LastUpdated 0}}
+        {{if eq $card.LastReported 0}}
         <span class="italic">Never</span>
         {{else}}
-        <span class="whitespace-nowrap format-timestamp" data-ts="{{$card.LastUpdated}}">
-            {{timeAgo $card.LastUpdated}}
+        <span class="whitespace-nowrap format-timestamp" data-ts="{{$card.LastReported}}">
+            {{timeAgo $card.LastReported}}
         </span>
         {{end}}
     </div>

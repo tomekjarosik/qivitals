@@ -158,16 +158,26 @@
                 </div>
                 <div>
                     <span class="text-sm text-slate-800">
-                    {{if .Sensor.LastUpdated}}
-                        <span class="whitespace-nowrap format-timestamp" data-ts="{{.Sensor.LastUpdated}}">
-                            {{.Sensor.LastUpdated}}
+                    {{if gt .Sensor.LastReported 0}}
+                        <span class="whitespace-nowrap format-timestamp" data-ts="{{.Sensor.LastReported}}">
+                            {{.Sensor.LastReported}}
                         </span>
                     {{else}}
-                        Never
+                        Never reported
                     {{end}}
                     </span>
                 </div>
             </div>
+
+            {{if gt .Sensor.LastSpecUpdated 0}}
+            <div class="mt-2">
+                <span class="block text-xs font-medium text-slate-500 mb-1">Last Config Change</span>
+                <span class="whitespace-nowrap format-timestamp" data-ts="{{.Sensor.LastSpecUpdated}}">
+                    {{.Sensor.LastSpecUpdated}}
+                </span>
+            </div>
+            {{end}}
+
             {{if .Sensor.ReportedData.Data}}
             <div class="mt-4">
                 <span class="block text-sm font-medium text-slate-600 mb-2">Reported Data</span>

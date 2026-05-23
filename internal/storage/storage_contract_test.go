@@ -257,7 +257,7 @@ func RunStorageContractTests(t *testing.T, setup func() SensorStorage, teardown 
 		require.NoError(t, err)
 
 		state2, _ := storage.GetStatus(ctx, "s1")
-		assert.GreaterOrEqual(t, state2.LastUpdated, state1.LastUpdated, "LastUpdated should always increase")
+		assert.GreaterOrEqual(t, state2.LastReportedAt, state1.LastReportedAt, "LastReportedAt should always increase")
 
 		// Postgres JSONB || operator merges keys. Let's ensure memory storage does too (if you implemented merging).
 		// If Memory storage overwrites entirely, this test might fail there. Assuming merging logic is intended!

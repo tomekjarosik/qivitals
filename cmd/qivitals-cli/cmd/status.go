@@ -77,7 +77,7 @@ func runStatus(cmd *cobra.Command, _ []string, sensorID, sensorName, namespace s
 
 	fmt.Printf("\n--- Status ---\n")
 	fmt.Printf("State:          %s\n", s.Status.State)
-	fmt.Printf("Last Updated:   %s\n", timeString(s.Status.LastUpdatedTimestamp))
+	fmt.Printf("Last Reported At:   %s\n", timeString(s.Status.LastReportedTimestamp))
 	fmt.Printf("Grace Period:   %d seconds\n", s.Spec.GracefulPeriodSeconds)
 	fmt.Printf("Failure Period: %d seconds\n", s.Spec.FailurePeriodSeconds)
 

@@ -69,10 +69,12 @@ message SensorSpec {
 // SensorStatus contains ONLY the observed runtime state.
 message SensorStatus {
   string state = 1;             // Computed state: "OK", "DEGRADED", "DEAD"
-  int64 last_updated_timestamp = 4;
-  map<string, string> reported_data = 5; // Generic telemetry
+  int64 last_reported_timestamp = 2;    // Unix timestamp of last heartbeat/data report
   // Detailed breakdown of the sensor's health evaluations
   repeated Condition conditions = 3;
+
+  map<string, string> reported_data = 5; // Generic telemetry
+  int64 last_spec_updated_timestamp = 6; // Unix timestamp of last configuration change
 }
 
 // Sensor is the top-level entity representing the entire resource.

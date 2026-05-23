@@ -41,7 +41,8 @@ func (p *PostgresSensorStorage) InitSchema(ctx context.Context) error {
 		failure_period BIGINT NOT NULL,
 		labels JSONB NOT NULL DEFAULT '{}'::jsonb,
 		registered_at BIGINT NOT NULL,
-		last_updated BIGINT NOT NULL,
+		last_reported BIGINT NOT NULL,
+	    last_spec_updated BIGINT NOT NULL DEFAULT 0,
 		metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
 		CONSTRAINT unique_namespace_name UNIQUE (namespace, name)
 	);
@@ -63,8 +64,8 @@ func (p *PostgresSensorStorage) Register(ctx context.Context, sensor *SensorInfo
 	}
 
 	query, args, err := p.sq.Insert("sensors").
-		Columns("id", "namespace", "name", "resource_version", "description", "graceful_period", "failure_period", "labels", "registered_at", "last_updated", "metadata", "condition_rules").
-		Values(sensor.ID, sensor.Namespace, sensor.Name, uuid.New().String(), sensor.Description, sensor.GracefulPeriod, sensor.FailurePeriod, labelsJSON, sensor.RegisteredAt, sensor.RegisteredAt, "{}", conditionRulesJSON).
+		Columns("id", "namespace", "name", "resource_version", "description", "graceful_period", "failure_period", "labels", "registered_at", "last_reported", "last_spec_updated", "metadata", "condition_rules").
+		Values(sensor.ID, sensor.Namespace, sensor.Name, uuid.New().String(), sensor.Description, sensor.GracefulPeriod, sensor.FailurePeriod, labelsJSON, sensor.RegisteredAt, sensor.RegisteredAt, 0, "{}", conditionRulesJSON).
 		ToSql()
 	if err != nil {
 		return err
@@ -122,6 +123,9 @@ func (p *PostgresSensorStorage) Patch(ctx context.Context, sensorID string, expe
 	// We use a raw expression to increment a version counter or rotate a UUID
 	builder = builder.Set("resource_version", squirrel.Expr("resource_version || '_' || substring(md5(random()::text), 1, 8)"))
 
+	// Track when spec/metadata changes happen
+	builder = builder.Set("last_spec_updated", squirrel.Expr("GREATEST(last_spec_updated, extract(epoch from now())::bigint)"))
+
 	query, args, err := builder.ToSql()
 	if err != nil {
 		return err
@@ -154,7 +158,7 @@ func (p *PostgresSensorStorage) SendData(ctx context.Context, sensorID string, m
 	// Postgres JSONB magic: `metadata || $3` merges the new JSON map into the existing one!
 	query := `
 		UPDATE sensors 
-		SET last_updated = extract(epoch from now()),
+		SET last_reported = extract(epoch from now()),
 		    metadata = metadata || $1::jsonb
 		WHERE id = $2
 	`
@@ -197,7 +201,7 @@ func (p *PostgresSensorStorage) Delete(ctx context.Context, sensorID string) err
 }
 
 func (p *PostgresSensorStorage) Query(ctx context.Context, filter QueryFilter) ([]*SensorState, error) {
-	builder := p.sq.Select("id", "namespace", "name", "resource_version", "description", "graceful_period", "failure_period", "labels", "registered_at", "last_updated", "metadata", "condition_rules").From("sensors")
+	builder := p.sq.Select("id", "namespace", "name", "resource_version", "description", "graceful_period", "failure_period", "labels", "registered_at", "last_reported", "last_spec_updated", "metadata", "condition_rules").From("sensors")
 
 	if filter.ID != "" {
 		builder = builder.Where(squirrel.Eq{"id": filter.ID})
@@ -256,11 +260,12 @@ func (p *PostgresSensorStorage) Query(ctx context.Context, filter QueryFilter) (
 		var state SensorState
 		var info SensorInfo
 		var labelsBytes, metadataBytes, conditionRulesBytes []byte
+		var lastSpecUpdated int64
 
 		err := rows.Scan(
 			&info.ID, &info.Namespace, &info.Name, &info.ResourceVersion, &info.Description,
 			&info.GracefulPeriod, &info.FailurePeriod, &labelsBytes, &info.RegisteredAt,
-			&state.LastUpdated, &metadataBytes, &conditionRulesBytes,
+			&state.LastReportedAt, &lastSpecUpdated, &metadataBytes, &conditionRulesBytes,
 		)
 		if err != nil {
 			return nil, err

@@ -51,7 +51,8 @@ type SensorCardView struct {
 	GracefulPeriodSeconds int64
 	FailurePeriodSeconds  int64
 	ReportedData          ReportedDataView
-	LastUpdated           int64
+	LastReported          int64
+	LastSpecUpdated       int64
 	ShowLabels            bool
 	Conditions            []ConditionView
 	ConditionsByRule      ConditionsByName

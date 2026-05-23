@@ -106,7 +106,7 @@ func printQueryResult(count int, sensors []*v1.Sensor) {
 
 		if s.Status != nil {
 			state = s.Status.State
-			lastUpdated = s.Status.LastUpdatedTimestamp
+			lastUpdated = s.Status.LastReportedTimestamp
 		}
 
 		// Create a nice human-readable name string: namespace/name
