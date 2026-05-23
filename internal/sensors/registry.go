@@ -1,10 +1,14 @@
 package sensors
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
 )
+
+// ErrTypeNotFound is returned when a requested sensor type is not registered.
+var ErrTypeNotFound = errors.New("unknown sensor type")
 
 // Constructor is a function that creates a new SensorReader instance
 // with the given arguments. Each sensor type provides its own constructor.

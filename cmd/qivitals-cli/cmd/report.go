@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -96,10 +97,12 @@ func collectGeneric(data map[string]string) (map[string]string, error) {
 func collectSensor(ctx context.Context, sensorType string, args []string) (map[string]string, error) {
 	sensor, err := sensors.DefaultRegistry().Create(sensorType, args...)
 	if err != nil {
-		return nil, fmt.Errorf("unknown sensor type %q (available: %s)",
-			sensorType, strings.Join(sensors.DefaultRegistry().AvailableTypes(), ", "))
+		if errors.Is(err, sensors.ErrTypeNotFound) {
+			return nil, fmt.Errorf("unknown sensor type %q (available: %s)",
+				sensorType, strings.Join(sensors.DefaultRegistry().AvailableTypes(), ", "))
+		}
+		return nil, err // pass through constructor errors (e.g., "domain must be provided")
 	}
-
 	if err := sensor.Execute(ctx, args); err != nil {
 		return nil, fmt.Errorf("sensor %q failed: %w", sensorType, err)
 	}
