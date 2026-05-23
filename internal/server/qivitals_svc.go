@@ -24,6 +24,7 @@ func NewStatusMonitorService(storage storage.SensorStorage) *QiVitalsService {
 	if err != nil {
 		log.Fatalf("Warning: Failed to initialize CEL evaluator: %v", err)
 	}
+
 	return &QiVitalsService{
 		storage:            storage,
 		conditionEvaluator: conditionEvaluator,
@@ -180,11 +181,6 @@ func buildProtoSensor(state *storage.SensorState, conditions []*v1.Condition) *v
 		}
 	}
 
-	labels := state.Info.Labels
-	if labels == nil {
-		labels = make(map[string]string)
-	}
-
 	return &v1.Sensor{
 		Metadata: &v1.ObjectMeta{
 			Id:              state.Info.ID,
@@ -192,7 +188,7 @@ func buildProtoSensor(state *storage.SensorState, conditions []*v1.Condition) *v
 			Name:            state.Info.Name,
 			ResourceVersion: state.Info.ResourceVersion,
 			Description:     state.Info.Description,
-			Labels:          labels,
+			Labels:          state.Info.Labels,
 		},
 		Spec: &v1.SensorSpec{
 			GracefulPeriodSeconds: state.Info.GracefulPeriod,

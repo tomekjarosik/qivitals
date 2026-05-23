@@ -65,18 +65,18 @@ func RunStorageContractTests(t *testing.T, setup func() SensorStorage, teardown 
 			{
 				Name:            "LowBattery",
 				Expression:      `double(reported_data['battery_level']) < 15.0`,
-				TargetState:     "DEGRADED",
+				TargetState:     string(StatusDegraded),
 				MessageTemplate: "Battery at {{ .reported_data.battery_level }}%",
 			},
 			{
 				Name:        "HighLatency",
 				Expression:  `int(reported_data['latency_ms']) > 500`,
-				TargetState: "DEGRADED",
+				TargetState: string(StatusDegraded),
 			},
 			{
 				Name:        "ProdEnv",
 				Expression:  `labels['environment'] == 'production'`,
-				TargetState: "OK",
+				TargetState: string(StatusActive),
 			},
 		}
 
@@ -172,7 +172,7 @@ func RunStorageContractTests(t *testing.T, setup func() SensorStorage, teardown 
 		ctx := context.Background()
 
 		conditions := []*v1.ConditionRule{
-			{Name: "Rule1", Expression: `true`, TargetState: "DEGRADED"},
+			{Name: "Rule1", Expression: `true`, TargetState: string(StatusDegraded)},
 		}
 
 		sensor := &SensorInfo{

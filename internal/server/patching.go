@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
@@ -185,7 +186,7 @@ func sensorInfoToAPIShape(info *storage.SensorInfo) *apiShape {
 	out.Metadata.Namespace = info.Namespace
 	out.Metadata.Name = info.Name
 	out.Metadata.Description = info.Description
-	out.Metadata.Labels = cloneStringMap(info.Labels)
+	out.Metadata.Labels = maps.Clone(info.Labels)
 	out.Spec.GracefulPeriod = info.GracefulPeriod
 	out.Spec.FailurePeriod = info.FailurePeriod
 	out.Spec.Rules = info.ConditionRules
@@ -246,14 +247,6 @@ func pathToColumn(path string) string {
 // ---------------------------------------------------------------------------
 // 5. Utilities
 // ---------------------------------------------------------------------------
-
-func cloneStringMap(in map[string]string) map[string]string {
-	out := make(map[string]string, len(in))
-	for k, v := range in {
-		out[k] = v
-	}
-	return out
-}
 
 func mapKeys(m map[string]bool) []string {
 	keys := make([]string, 0, len(m))

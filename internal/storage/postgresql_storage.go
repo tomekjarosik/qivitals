@@ -13,6 +13,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+const (
+	postgresUniqueViolation = "23505"
+)
+
 // PostgresSensorStorage implements SensorStorage using PostgreSQL
 type PostgresSensorStorage struct {
 	pool *pgxpool.Pool
@@ -74,8 +78,7 @@ func (p *PostgresSensorStorage) Register(ctx context.Context, sensor *SensorInfo
 	_, err = p.pool.Exec(ctx, query, args...)
 	if err != nil {
 		// pgx specific way to check for Postgres Error codes
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // 23505 = unique_violation
+		if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && pgErr.Code == postgresUniqueViolation {
 			return ErrSensorAlreadyExists
 		}
 		return err
@@ -232,12 +235,12 @@ func (p *PostgresSensorStorage) Query(ctx context.Context, filter QueryFilter) (
 		builder = builder.Where("jsonb_exists_all(labels, ?::text[])", filter.HasLabelKeys)
 	}
 
-	if filter.OrderBy != "" {
-		direction := "ASC"
-		if filter.OrderDesc {
-			direction = "DESC"
-		}
-		builder = builder.OrderBy(fmt.Sprintf("%s %s", filter.OrderBy, direction))
+	orderByStr, err := sanitizeOrderBy(filter.OrderBy, filter.OrderDesc)
+	if err != nil {
+		return nil, err
+	}
+	if orderByStr != "" {
+		builder = builder.OrderBy(orderByStr)
 	}
 
 	if filter.Limit > 0 {
@@ -287,4 +290,25 @@ func (p *PostgresSensorStorage) Query(ctx context.Context, filter QueryFilter) (
 	}
 
 	return results, rows.Err()
+}
+
+var allowedOrderColumns = map[string]string{
+	"name":      "name",
+	"id":        "id",
+	"namespace": "namespace",
+}
+
+func sanitizeOrderBy(column string, descending bool) (string, error) {
+	if column == "" {
+		return "", nil
+	}
+	col, ok := allowedOrderColumns[column]
+	if !ok {
+		return "", fmt.Errorf("unknown order column: %s", column)
+	}
+	direction := "ASC"
+	if descending {
+		direction = "DESC"
+	}
+	return fmt.Sprintf("%s %s", col, direction), nil
 }
