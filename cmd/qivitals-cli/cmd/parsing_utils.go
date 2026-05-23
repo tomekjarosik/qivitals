@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	v1 "github.com/tomekjarosik/qivitals/gen/api/qivitals/v1"
 )
 
 // parseLabels takes a slice of "key=value" strings from the CLI flags
@@ -57,4 +59,35 @@ func ParseExtendedDuration(s string) (time.Duration, error) {
 	}
 
 	return time.ParseDuration(s)
+}
+
+func parseConditionRule(s string) (*v1.ConditionRule, error) {
+	parts := strings.SplitN(s, ":", 4)
+	if len(parts) < 2 {
+		return nil, fmt.Errorf("condition rule must have at least 'name:expression', got %q", s)
+	}
+	rule := &v1.ConditionRule{
+		Name:       parts[0],
+		Expression: parts[1],
+	}
+	if len(parts) >= 3 {
+		rule.TargetState = parts[2]
+	}
+	if len(parts) == 4 {
+		rule.MessageTemplate = parts[3]
+	}
+	return rule, nil
+}
+
+// parseConditionRules parses a slice of condition rule strings.
+func parseConditionRules(rules []string) ([]*v1.ConditionRule, error) {
+	result := make([]*v1.ConditionRule, 0, len(rules))
+	for _, s := range rules {
+		rule, err := parseConditionRule(s)
+		if err != nil {
+			return nil, fmt.Errorf("invalid condition rule %q: %w", s, err)
+		}
+		result = append(result, rule)
+	}
+	return result, nil
 }

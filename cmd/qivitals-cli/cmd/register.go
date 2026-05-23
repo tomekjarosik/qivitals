@@ -11,13 +11,14 @@ import (
 
 func NewCmdRegister() *cobra.Command {
 	var (
-		sensorID    string
-		namespace   string
-		sensorName  string
-		description string
-		graceful    string
-		failure     string
-		labels      []string
+		sensorID       string
+		namespace      string
+		sensorName     string
+		description    string
+		graceful       string
+		failure        string
+		labels         []string
+		conditionRules []string
 	)
 
 	cmd := &cobra.Command{
@@ -40,7 +41,7 @@ Examples:
 			if err != nil {
 				return fmt.Errorf("invalid value for --failure: %w", err)
 			}
-			return runRegister(cmd, args, sensorID, namespace, sensorName, description, gracefulDuration, failureDuration, labels)
+			return runRegister(cmd, args, sensorID, namespace, sensorName, description, gracefulDuration, failureDuration, labels, conditionRules)
 		},
 	}
 
@@ -51,16 +52,22 @@ Examples:
 	cmd.Flags().StringVarP(&graceful, "graceful", "g", "300s", "Duration before showing DEGRADED status")
 	cmd.Flags().StringVarP(&failure, "failure", "f", "900s", "Duration before showing DEAD status")
 	cmd.Flags().StringArrayVar(&labels, "label", []string{}, "Labels as key:value pairs (can be repeated)")
+	cmd.Flags().StringArrayVar(&conditionRules, "condition", []string{},
+		"Add a condition rule (format: 'name:expression:target_state[:message]')")
 
 	cmd.MarkFlagRequired("name")
 
 	return cmd
 }
 
-func runRegister(cmd *cobra.Command, _ []string, sensorID, namespace, sensorName, description string, gracefulDuration, failureDuration time.Duration, labelStrings []string) error {
+func runRegister(cmd *cobra.Command, _ []string, sensorID, namespace, sensorName, description string, gracefulDuration, failureDuration time.Duration, labelStrings []string, conditionRules []string) error {
 	parsedLabels, err := parseLabels(labelStrings)
 	if err != nil {
 		return fmt.Errorf("failed to parse labels: %w", err)
+	}
+	parsedConditionRules, err := parseConditionRules(conditionRules)
+	if err != nil {
+		return fmt.Errorf("failed to parse condition rules: %w", err)
 	}
 
 	client, conn, err := NewQiVitalsClient(cmd.Context()) // Assuming you have a helper for this now!
@@ -82,6 +89,7 @@ func runRegister(cmd *cobra.Command, _ []string, sensorID, namespace, sensorName
 			Spec: &v1.SensorSpec{
 				GracefulPeriodSeconds: int64(math.Round(gracefulDuration.Seconds())),
 				FailurePeriodSeconds:  int64(math.Round(failureDuration.Seconds())),
+				Rules:                 parsedConditionRules,
 			},
 		},
 	}
