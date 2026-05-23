@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	v1 "github.com/tomekjarosik/qivitals/gen/api/qivitals/v1"
 )
 
 // MemorySensorStorage implements SensorStorage using in-memory maps
@@ -56,9 +57,10 @@ func (m *MemorySensorStorage) Register(ctx context.Context, sensor *SensorInfo) 
 			FailurePeriod:   sensor.FailurePeriod,
 			Labels:          labels,
 			RegisteredAt:    sensor.RegisteredAt,
+			ConditionRules:  sensor.ConditionRules,
 		},
-		LastUpdated: sensor.RegisteredAt,
-		Metadata:    make(map[string]string),
+		LastUpdated:  sensor.RegisteredAt,
+		ReportedData: make(map[string]string),
 	}
 
 	return nil
@@ -96,6 +98,12 @@ func (m *MemorySensorStorage) Patch(ctx context.Context, sensorID string, expect
 				labels[k] = v
 			}
 			state.Info.Labels = labels
+		case "condition_rules":
+			conditionRules := make([]*v1.ConditionRule, len(updates.ConditionRules))
+			for i, rule := range updates.ConditionRules {
+				conditionRules[i] = rule
+			}
+			state.Info.ConditionRules = conditionRules
 		}
 	}
 
@@ -118,7 +126,7 @@ func (m *MemorySensorStorage) SendData(ctx context.Context, sensorID string, met
 
 	state.LastUpdated = now
 	for k, v := range metadata {
-		state.Metadata[k] = v
+		state.ReportedData[k] = v
 	}
 
 	return nil

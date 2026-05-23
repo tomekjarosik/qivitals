@@ -90,9 +90,6 @@ func collectResults(ctx context.Context, args []string, data map[string]string, 
 }
 
 func collectGeneric(data map[string]string) (map[string]string, error) {
-	if len(data) == 0 {
-		return nil, fmt.Errorf("generic mode requires at least one --data flag")
-	}
 	return data, nil
 }
 

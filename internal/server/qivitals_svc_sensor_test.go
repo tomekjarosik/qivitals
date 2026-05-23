@@ -530,6 +530,82 @@ func TestPatchSensor(t *testing.T) {
 			},
 		},
 		{
+			name: "Success - Add rules to sensor with no initial rules",
+			request: &v1.PatchSensorRequest{
+				Id: "test-sensor",
+				Operations: []*v1.PatchOperation{
+					{
+						Op:    "replace",
+						Path:  "/spec/rules",
+						Value: `[{"name":"LowBattery","expression":"double(reported_data['battery_level']) < 15.0","target_state":"DEGRADED","message_template":"Battery at {{ .reported_data.battery_level }}%"}]`,
+					},
+				},
+			},
+			expectedError: codes.OK,
+			verifyRelation: func(t *testing.T, updated *v1.Sensor) {
+				require.Len(t, updated.Spec.Rules, 1)
+				assert.Equal(t, "LowBattery", updated.Spec.Rules[0].Name)
+				assert.Equal(t, "double(reported_data['battery_level']) < 15.0", updated.Spec.Rules[0].Expression)
+				assert.Equal(t, "DEGRADED", updated.Spec.Rules[0].TargetState)
+				assert.Contains(t, updated.Spec.Rules[0].MessageTemplate, "Battery at")
+			},
+		},
+		{
+			name: "Success - Replace all existing rules",
+			request: &v1.PatchSensorRequest{
+				Id: "test-sensor",
+				Operations: []*v1.PatchOperation{
+					{
+						Op:    "replace",
+						Path:  "/spec/rules",
+						Value: `[{"name":"HighTemp","expression":"int(reported_data['temp']) > 80","target_state":"DEAD"}]`,
+					},
+				},
+			},
+			expectedError: codes.OK,
+			verifyRelation: func(t *testing.T, updated *v1.Sensor) {
+				require.Len(t, updated.Spec.Rules, 1)
+				assert.Equal(t, "HighTemp", updated.Spec.Rules[0].Name)
+				assert.Equal(t, "int(reported_data['temp']) > 80", updated.Spec.Rules[0].Expression)
+				assert.Equal(t, "DEAD", updated.Spec.Rules[0].TargetState)
+			},
+		},
+		{
+			name: "Success - Patch a specific rule field (deep path)",
+			request: &v1.PatchSensorRequest{
+				Id: "test-sensor",
+				Operations: []*v1.PatchOperation{
+					{
+						Op:    "replace",
+						Path:  "/spec/rules/0/target_state",
+						Value: `"WARNING"`,
+					},
+				},
+			},
+			expectedError: codes.OK,
+			verifyRelation: func(t *testing.T, updated *v1.Sensor) {
+				require.Len(t, updated.Spec.Rules, 1)
+				assert.Equal(t, "WARNING", updated.Spec.Rules[0].TargetState)
+			},
+		},
+		{
+			name: "Success - Remove all rules",
+			request: &v1.PatchSensorRequest{
+				Id: "test-sensor",
+				Operations: []*v1.PatchOperation{
+					{
+						Op:    "replace",
+						Path:  "/spec/rules",
+						Value: `null`,
+					},
+				},
+			},
+			expectedError: codes.OK,
+			verifyRelation: func(t *testing.T, updated *v1.Sensor) {
+				assert.Empty(t, updated.Spec.Rules)
+			},
+		},
+		{
 			name: "Failure - Missing ID",
 			request: &v1.PatchSensorRequest{
 				Id: "",
@@ -565,6 +641,16 @@ func TestPatchSensor(t *testing.T) {
 				Id: "test-sensor",
 				Operations: []*v1.PatchOperation{
 					{Op: "move", Path: "/metadata/labels/env", Value: `"dev"`},
+				},
+			},
+			expectedError: codes.InvalidArgument,
+		},
+		{
+			name: "Failure - Unauthorized path to condition rules via metadata",
+			request: &v1.PatchSensorRequest{
+				Id: "test-sensor",
+				Operations: []*v1.PatchOperation{
+					{Op: "replace", Path: "/metadata/rules", Value: `[{"name":"Test"}]`},
 				},
 			},
 			expectedError: codes.InvalidArgument,
@@ -608,6 +694,7 @@ func TestPatchSensor(t *testing.T) {
 			assert.Equal(t, resp.Sensor.Metadata.Labels, persistedState.Info.Labels)
 			assert.Equal(t, resp.Sensor.Spec.GracefulPeriodSeconds, persistedState.Info.GracefulPeriod)
 			assert.Equal(t, resp.Sensor.Spec.FailurePeriodSeconds, persistedState.Info.FailurePeriod)
+			assert.Equal(t, resp.Sensor.Spec.Rules, persistedState.Info.ConditionRules)
 		})
 	}
 }

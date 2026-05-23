@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -45,6 +46,7 @@ func (p *PostgresSensorStorage) InitSchema(ctx context.Context) error {
 		CONSTRAINT unique_namespace_name UNIQUE (namespace, name)
 	);
 	CREATE INDEX IF NOT EXISTS idx_sensors_labels ON sensors USING GIN (labels);
+	ALTER TABLE sensors ADD COLUMN condition_rules JSONB DEFAULT '[]'::jsonb;
 	`
 	_, err := p.pool.Exec(ctx, query)
 	return err
@@ -55,10 +57,14 @@ func (p *PostgresSensorStorage) Register(ctx context.Context, sensor *SensorInfo
 	if string(labelsJSON) == "null" {
 		labelsJSON = []byte("{}")
 	}
+	conditionRulesJSON, _ := json.Marshal(sensor.ConditionRules)
+	if string(conditionRulesJSON) == "null" {
+		conditionRulesJSON = []byte("[]")
+	}
 
 	query, args, err := p.sq.Insert("sensors").
-		Columns("id", "namespace", "name", "resource_version", "description", "graceful_period", "failure_period", "labels", "registered_at", "last_updated", "metadata").
-		Values(sensor.ID, sensor.Namespace, sensor.Name, uuid.New().String(), sensor.Description, sensor.GracefulPeriod, sensor.FailurePeriod, labelsJSON, sensor.RegisteredAt, sensor.RegisteredAt, "{}").
+		Columns("id", "namespace", "name", "resource_version", "description", "graceful_period", "failure_period", "labels", "registered_at", "last_updated", "metadata", "condition_rules").
+		Values(sensor.ID, sensor.Namespace, sensor.Name, uuid.New().String(), sensor.Description, sensor.GracefulPeriod, sensor.FailurePeriod, labelsJSON, sensor.RegisteredAt, sensor.RegisteredAt, "{}", conditionRulesJSON).
 		ToSql()
 	if err != nil {
 		return err
@@ -104,6 +110,12 @@ func (p *PostgresSensorStorage) Patch(ctx context.Context, sensorID string, expe
 		case "labels":
 			labelsJSON, _ := json.Marshal(updates.Labels)
 			builder = builder.Set("labels", labelsJSON)
+		case "condition_rules":
+			rulesJSON, _ := json.Marshal(updates.ConditionRules)
+			if string(rulesJSON) == "null" {
+				rulesJSON = []byte("[]")
+			}
+			builder = builder.Set("condition_rules", rulesJSON)
 		}
 	}
 
@@ -185,7 +197,7 @@ func (p *PostgresSensorStorage) Delete(ctx context.Context, sensorID string) err
 }
 
 func (p *PostgresSensorStorage) Query(ctx context.Context, filter QueryFilter) ([]*SensorState, error) {
-	builder := p.sq.Select("id", "namespace", "name", "resource_version", "description", "graceful_period", "failure_period", "labels", "registered_at", "last_updated", "metadata").From("sensors")
+	builder := p.sq.Select("id", "namespace", "name", "resource_version", "description", "graceful_period", "failure_period", "labels", "registered_at", "last_updated", "metadata", "condition_rules").From("sensors")
 
 	if filter.ID != "" {
 		builder = builder.Where(squirrel.Eq{"id": filter.ID})
@@ -243,12 +255,12 @@ func (p *PostgresSensorStorage) Query(ctx context.Context, filter QueryFilter) (
 	for rows.Next() {
 		var state SensorState
 		var info SensorInfo
-		var labelsBytes, metadataBytes []byte
+		var labelsBytes, metadataBytes, conditionRulesBytes []byte
 
 		err := rows.Scan(
 			&info.ID, &info.Namespace, &info.Name, &info.ResourceVersion, &info.Description,
 			&info.GracefulPeriod, &info.FailurePeriod, &labelsBytes, &info.RegisteredAt,
-			&state.LastUpdated, &metadataBytes,
+			&state.LastUpdated, &metadataBytes, &conditionRulesBytes,
 		)
 		if err != nil {
 			return nil, err
@@ -257,8 +269,13 @@ func (p *PostgresSensorStorage) Query(ctx context.Context, filter QueryFilter) (
 		if err = json.Unmarshal(labelsBytes, &info.Labels); err != nil {
 			return nil, err
 		}
-		if err = json.Unmarshal(metadataBytes, &state.Metadata); err != nil {
+		if err = json.Unmarshal(metadataBytes, &state.ReportedData); err != nil {
 			return nil, err
+		}
+		if len(conditionRulesBytes) > 0 && !bytes.Equal(conditionRulesBytes, []byte("[]")) {
+			if err = json.Unmarshal(conditionRulesBytes, &info.ConditionRules); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal condition_rules: %w", err)
+			}
 		}
 		state.Info = &info
 		results = append(results, &state)

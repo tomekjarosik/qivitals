@@ -20,6 +20,12 @@ type LabelPillsView struct {
 type ReportedDataView struct {
 	Data map[string]string
 }
+type ConditionView struct {
+	Type    string
+	Status  string // "True", "False", "Unknown"
+	Reason  string
+	Message string
+}
 
 // SensorCardView is a single sensor card on the dashboard.
 type SensorCardView struct {
@@ -34,6 +40,7 @@ type SensorCardView struct {
 	ReportedData          ReportedDataView
 	LastUpdated           int64
 	ShowLabels            bool
+	Conditions            []ConditionView
 }
 
 // NamespaceGroupView groups sensors under a namespace.

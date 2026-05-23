@@ -3,6 +3,8 @@ package storage
 import (
 	"context"
 	"errors"
+
+	v1 "github.com/tomekjarosik/qivitals/gen/api/qivitals/v1"
 )
 
 // SensorStatusType represents the current state of a sensor
@@ -17,21 +19,22 @@ const (
 // SensorInfo contains all information about a registered sensor
 type SensorInfo struct {
 	ID              string
-	Name            string
 	Namespace       string
+	Name            string
+	ResourceVersion string
 	Description     string
 	GracefulPeriod  int64
 	FailurePeriod   int64
 	Labels          map[string]string
 	RegisteredAt    int64
-	ResourceVersion string
+	ConditionRules  []*v1.ConditionRule
 }
 
 // SensorState tracks the current state of a sensor
 type SensorState struct {
-	Info        *SensorInfo
-	LastUpdated int64
-	Metadata    map[string]string
+	Info         *SensorInfo
+	LastUpdated  int64
+	ReportedData map[string]string
 }
 
 type QueryFilter struct {

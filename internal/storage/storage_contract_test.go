@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	v1 "github.com/tomekjarosik/qivitals/gen/api/qivitals/v1"
 )
 
 // RunStorageContractTests executes the standard suite of storage tests against any SensorStorage implementation.
@@ -53,6 +54,152 @@ func RunStorageContractTests(t *testing.T, setup func() SensorStorage, teardown 
 		// Edge case: Get non-existent
 		_, err = storage.GetStatus(ctx, "does-not-exist")
 		assert.IsType(t, ErrSensorNotFound, err)
+	})
+
+	t.Run("Condition Rules Roundtrip", func(t *testing.T) {
+		storage := setup()
+		defer teardown()
+		ctx := context.Background()
+
+		conditions := []*v1.ConditionRule{
+			{
+				Name:            "LowBattery",
+				Expression:      `double(reported_data['battery_level']) < 15.0`,
+				TargetState:     "DEGRADED",
+				MessageTemplate: "Battery at {{ .reported_data.battery_level }}%",
+			},
+			{
+				Name:        "HighLatency",
+				Expression:  `int(reported_data['latency_ms']) > 500`,
+				TargetState: "DEGRADED",
+			},
+			{
+				Name:        "ProdEnv",
+				Expression:  `labels['environment'] == 'production'`,
+				TargetState: "OK",
+			},
+		}
+
+		sensor := &SensorInfo{
+			ID:             "condition-1",
+			Namespace:      "infra",
+			Name:           "battery-monitor",
+			Description:    "Battery sensor with conditions",
+			GracefulPeriod: 300,
+			FailurePeriod:  600,
+			Labels:         map[string]string{"environment": "production"},
+			ConditionRules: conditions,
+		}
+
+		// Register sensor with conditions
+		err := storage.Register(ctx, sensor)
+		require.NoError(t, err, "Failed to register sensor with condition rules")
+
+		// Retrieve and verify all condition fields
+		state, err := storage.GetStatus(ctx, "condition-1")
+		require.NoError(t, err)
+		require.NotNil(t, state.Info.ConditionRules, "ConditionRules should not be nil")
+		assert.Len(t, state.Info.ConditionRules, len(conditions), "Should store all %d condition rules", len(conditions))
+
+		// Verify each rule preserves all fields exactly
+		for i, expected := range conditions {
+			actual := state.Info.ConditionRules[i]
+			require.NotNil(t, actual, "Condition rule %d should not be nil", i)
+			assert.Equal(t, expected.Name, actual.Name, "Rule name should match at index %d", i)
+			assert.Equal(t, expected.Expression, actual.Expression, "Rule expression should match at index %d", i)
+			assert.Equal(t, expected.TargetState, actual.TargetState, "Rule target_state should match at index %d", i)
+			assert.Equal(t, expected.MessageTemplate, actual.MessageTemplate, "Rule message_template should match at index %d", i)
+		}
+
+		// Register sensor without conditions (empty rules)
+		sensorNoConditions := &SensorInfo{
+			ID:             "condition-2",
+			Namespace:      "infra",
+			Name:           "simple-sensor",
+			GracefulPeriod: 100,
+			FailurePeriod:  200,
+			ConditionRules: nil,
+		}
+		err = storage.Register(ctx, sensorNoConditions)
+		require.NoError(t, err)
+
+		stateNoCond, err := storage.GetStatus(ctx, "condition-2")
+		require.NoError(t, err)
+		assert.Nil(t, stateNoCond.Info.ConditionRules, "Nil condition rules should roundtrip as nil")
+
+		// Register sensor with empty slice
+		sensorEmptySlice := &SensorInfo{
+			ID:             "condition-3",
+			Namespace:      "infra",
+			Name:           "empty-sensors",
+			GracefulPeriod: 100,
+			FailurePeriod:  200,
+			ConditionRules: []*v1.ConditionRule{},
+		}
+		err = storage.Register(ctx, sensorEmptySlice)
+		require.NoError(t, err)
+
+		stateEmpty, err := storage.GetStatus(ctx, "condition-3")
+		require.NoError(t, err)
+		// Empty slice may become nil after JSON marshal/unmarshal roundtrip, which is acceptable
+		assert.Empty(t, stateEmpty.Info.ConditionRules)
+
+		// Verify conditions persist across Query
+		filter := QueryFilter{Namespace: "infra"}
+		results, err := storage.Query(ctx, filter)
+		require.NoError(t, err)
+
+		var batterySensor, simpleSensor *SensorState
+		for _, s := range results {
+			if s.Info.Name == "battery-monitor" {
+				batterySensor = s
+			}
+			if s.Info.Name == "simple-sensor" {
+				simpleSensor = s
+			}
+		}
+
+		require.NotNil(t, batterySensor, "battery-monitor should be found in query results")
+		assert.Len(t, batterySensor.Info.ConditionRules, 3, "Condition rules should persist through Query")
+
+		require.NotNil(t, simpleSensor, "simple-sensor should be found in query results")
+		assert.Nil(t, simpleSensor.Info.ConditionRules, "No condition rules should be present for simple-sensor")
+	})
+
+	t.Run("Condition Rules Persist Through Patch", func(t *testing.T) {
+		storage := setup()
+		defer teardown()
+		ctx := context.Background()
+
+		conditions := []*v1.ConditionRule{
+			{Name: "Rule1", Expression: `true`, TargetState: "DEGRADED"},
+		}
+
+		sensor := &SensorInfo{
+			ID:             "patch-test",
+			Namespace:      "test",
+			Name:           "patch-condition",
+			GracefulPeriod: 100,
+			ConditionRules: conditions,
+		}
+
+		err := storage.Register(ctx, sensor)
+		require.NoError(t, err)
+
+		state, err := storage.GetStatus(ctx, "patch-test")
+		require.NoError(t, err)
+		assert.Len(t, state.Info.ConditionRules, 1)
+
+		// Patch the description (not conditions)
+		updates := &SensorInfo{Description: "updated"}
+		err = storage.Patch(ctx, "patch-test", state.Info.ResourceVersion, updates, []string{"description"})
+		require.NoError(t, err)
+
+		stateAfterPatch, err := storage.GetStatus(ctx, "patch-test")
+		require.NoError(t, err)
+		assert.Equal(t, "updated", stateAfterPatch.Info.Description)
+		assert.Len(t, stateAfterPatch.Info.ConditionRules, 1, "ConditionRules should persist after patching other fields")
+		assert.Equal(t, "Rule1", stateAfterPatch.Info.ConditionRules[0].Name)
 	})
 
 	t.Run("Patch", func(t *testing.T) {
@@ -103,7 +250,7 @@ func RunStorageContractTests(t *testing.T, setup func() SensorStorage, teardown 
 		require.NoError(t, err)
 
 		state1, _ := storage.GetStatus(ctx, "s1")
-		assert.Equal(t, "1.2.3", state1.Metadata["version"])
+		assert.Equal(t, "1.2.3", state1.ReportedData["version"])
 
 		// Second Data (Failed) -> Should update metadata but NOT LastOkTimestamp
 		err = storage.SendData(ctx, "s1", map[string]string{"error": "timeout"})
@@ -114,8 +261,8 @@ func RunStorageContractTests(t *testing.T, setup func() SensorStorage, teardown 
 
 		// Postgres JSONB || operator merges keys. Let's ensure memory storage does too (if you implemented merging).
 		// If Memory storage overwrites entirely, this test might fail there. Assuming merging logic is intended!
-		assert.Equal(t, "1.2.3", state2.Metadata["version"], "Previous metadata keys should ideally be preserved (JSONB merge)")
-		assert.Equal(t, "timeout", state2.Metadata["error"])
+		assert.Equal(t, "1.2.3", state2.ReportedData["version"], "Previous metadata keys should ideally be preserved (JSONB merge)")
+		assert.Equal(t, "timeout", state2.ReportedData["error"])
 
 		// Edge case: SendData non-existent
 		err = storage.SendData(ctx, "does-not-exist", nil)

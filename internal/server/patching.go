@@ -15,7 +15,7 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// 1. Path Whitelist (K8s-style safety)
+// 1. Path Allowlist (K8s-style safety)
 // ---------------------------------------------------------------------------
 
 // patchablePaths defines which JSON Pointer paths are allowed to be modified.
@@ -27,6 +27,7 @@ var patchablePaths = map[string]bool{
 	"/metadata/labels":              true,
 	"/spec/graceful_period_seconds": false,
 	"/spec/failure_period_seconds":  false,
+	"/spec/rules":                   true,
 }
 
 func validatePath(path string) error {
@@ -120,7 +121,8 @@ func (s *QiVitalsService) PatchSensor(
 	if err != nil {
 		return nil, err
 	}
-	return &v1.PatchSensorResponse{Sensor: buildProtoSensor(finalState)}, nil
+	conditions := s.evaluateConditions(ctx, finalState)
+	return &v1.PatchSensorResponse{Sensor: buildProtoSensor(finalState, conditions)}, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -171,8 +173,9 @@ type apiShape struct {
 		Labels      map[string]string `json:"labels"`
 	} `json:"metadata"`
 	Spec struct {
-		GracefulPeriod int64 `json:"graceful_period_seconds"`
-		FailurePeriod  int64 `json:"failure_period_seconds"`
+		GracefulPeriod int64               `json:"graceful_period_seconds"`
+		FailurePeriod  int64               `json:"failure_period_seconds"`
+		Rules          []*v1.ConditionRule `json:"rules"`
 	} `json:"spec"`
 }
 
@@ -185,6 +188,13 @@ func sensorInfoToAPIShape(info *storage.SensorInfo) *apiShape {
 	out.Metadata.Labels = cloneStringMap(info.Labels)
 	out.Spec.GracefulPeriod = info.GracefulPeriod
 	out.Spec.FailurePeriod = info.FailurePeriod
+	out.Spec.Rules = info.ConditionRules
+	// Ensure rules is always a slice so JSON Patch 'replace' works even when initially empty
+	if info.ConditionRules == nil {
+		out.Spec.Rules = []*v1.ConditionRule{}
+	} else {
+		out.Spec.Rules = info.ConditionRules
+	}
 	return out
 }
 
@@ -202,6 +212,7 @@ func unmarshalAPIShape(data []byte, original *storage.SensorInfo) (*storage.Sens
 		Labels:         shape.Metadata.Labels,
 		GracefulPeriod: shape.Spec.GracefulPeriod,
 		FailurePeriod:  shape.Spec.FailurePeriod,
+		ConditionRules: shape.Spec.Rules,
 	}, nil
 }
 
@@ -226,6 +237,8 @@ func pathToColumn(path string) string {
 		return "graceful_period_seconds"
 	case "/spec/failure_period_seconds":
 		return "failure_period_seconds"
+	case "/spec/rules":
+		return "condition_rules"
 	}
 	return ""
 }

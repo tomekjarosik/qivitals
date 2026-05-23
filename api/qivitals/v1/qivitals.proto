@@ -17,10 +17,53 @@ message ObjectMeta {
   string resource_version = 6;
 }
 
+// ConditionRule defines a rule that evaluates against sensor data
+// and can override the sensor's computed state.
+message ConditionRule {
+  // Unique name for this rule (e.g., "BatteryLow", "HighLatency")
+  string name = 1;
+
+  // CEL expression to evaluate.
+  // Example: `double(reported_data['battery_level']) < 15.0`
+  //          `labels['environment'] == 'prod' && int(reported_data['cpu_percent']) > 90`
+  string expression = 2;
+
+  // The state to apply if this expression evaluates to true.
+  // Examples: "DEGRADED", "DEAD", or custom states like "WARNING"
+  string target_state = 3;
+
+  // Human-readable message template (optional).
+  // Supports Go templating with access to reported_data.
+  // Example: "Battery at {{ .reported_data.battery_level }}%"
+  string message_template = 4;
+}
+
+// Condition represents a single evaluation result from a ConditionRule.
+// Follows the Kubernetes Condition pattern.
+message Condition {
+  // Unique identifier matching a ConditionRule.name
+  string type = 1;
+
+  // Evaluation result: "True", "False", "Unknown"
+  string status = 2;
+
+  // Machine-readable reason (e.g., "ThresholdExceeded", "RuleNotMatched")
+  string reason = 3;
+
+  // Human-readable description (e.g., "Battery reported at 12%")
+  string message = 4;
+
+  // Unix timestamp when this condition last changed state
+  int64 last_transition_time = 5;
+}
+
 // SensorSpec contains ONLY the desired configuration.
 message SensorSpec {
   int64 graceful_period_seconds = 1;
   int64 failure_period_seconds = 2;
+
+  // The rules evaluated every time ReportSensor is called
+  repeated ConditionRule rules = 3;
 }
 
 // SensorStatus contains ONLY the observed runtime state.
@@ -28,6 +71,8 @@ message SensorStatus {
   string state = 1;             // Computed state: "OK", "DEGRADED", "DEAD"
   int64 last_updated_timestamp = 4;
   map<string, string> reported_data = 5; // Generic telemetry
+  // Detailed breakdown of the sensor's health evaluations
+  repeated Condition conditions = 3;
 }
 
 // Sensor is the top-level entity representing the entire resource.

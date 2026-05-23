@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,12 +15,18 @@ import (
 
 type QiVitalsService struct {
 	v1.UnimplementedQiVitalsServiceServer
-	storage storage.SensorStorage
+	storage            storage.SensorStorage
+	conditionEvaluator *ConditionEvaluator
 }
 
 func NewStatusMonitorService(storage storage.SensorStorage) *QiVitalsService {
+	conditionEvaluator, err := NewConditionEvaluator()
+	if err != nil {
+		log.Fatalf("Warning: Failed to initialize CEL evaluator: %v", err)
+	}
 	return &QiVitalsService{
-		storage: storage,
+		storage:            storage,
+		conditionEvaluator: conditionEvaluator,
 	}
 }
 
@@ -38,6 +45,7 @@ func (s *QiVitalsService) RegisterSensor(ctx context.Context, req *v1.RegisterSe
 		FailurePeriod:   req.Sensor.Spec.FailurePeriodSeconds,
 		Labels:          req.Sensor.Metadata.Labels, // Maps directly now!
 		RegisteredAt:    now,
+		ConditionRules:  req.Sensor.Spec.Rules,
 	}
 
 	if sensorInfo.ID == "" {
@@ -53,10 +61,20 @@ func (s *QiVitalsService) RegisterSensor(ctx context.Context, req *v1.RegisterSe
 	if err != nil {
 		return nil, err
 	}
+	conditions := s.evaluateConditions(ctx, state)
 
 	return &v1.RegisterSensorResponse{
-		Sensor: buildProtoSensor(state),
+		Sensor: buildProtoSensor(state, conditions),
 	}, nil
+}
+
+func (s *QiVitalsService) evaluateConditions(ctx context.Context, state *storage.SensorState) []*v1.Condition {
+	return s.conditionEvaluator.EvaluateConditions(
+		ctx,
+		state.Info.ConditionRules,
+		state.ReportedData,
+		state.Info.Labels,
+	)
 }
 
 func (s *QiVitalsService) ReportSensor(ctx context.Context, req *v1.ReportSensorRequest) (*v1.ReportSensorResponse, error) {
@@ -79,9 +97,9 @@ func (s *QiVitalsService) ReportSensor(ctx context.Context, req *v1.ReportSensor
 	if err != nil {
 		return nil, err
 	}
-	return &v1.ReportSensorResponse{
-		Sensor: buildProtoSensor(state),
-	}, nil
+	conditions := s.evaluateConditions(ctx, state)
+	sensor := buildProtoSensor(state, conditions)
+	return &v1.ReportSensorResponse{Sensor: sensor}, nil
 }
 
 func (s *QiVitalsService) DeleteSensor(ctx context.Context, req *v1.DeleteSensorRequest) (*v1.DeleteSensorResponse, error) {
@@ -116,7 +134,8 @@ func (s *QiVitalsService) QuerySensors(ctx context.Context, req *v1.QuerySensors
 
 	sensors := make([]*v1.Sensor, 0, len(states))
 	for _, state := range states {
-		protoSensor := buildProtoSensor(state)
+		conditions := s.evaluateConditions(ctx, state)
+		protoSensor := buildProtoSensor(state, conditions)
 
 		// Filter computed status if requested
 		if len(req.Statuses) > 0 {
@@ -141,8 +160,25 @@ func (s *QiVitalsService) QuerySensors(ctx context.Context, req *v1.QuerySensors
 
 // --- Helpers ---
 
-func buildProtoSensor(state *storage.SensorState) *v1.Sensor {
+func buildProtoSensor(state *storage.SensorState, conditions []*v1.Condition) *v1.Sensor {
 	computedState := calculateSensorStatus(state)
+
+	if len(conditions) > 0 {
+		for _, cond := range conditions {
+			if cond.Status == "True" {
+				// Find the matching rule's target_state
+				for _, rule := range state.Info.ConditionRules {
+					if rule.Name == cond.Type {
+						if rule.TargetState != "" {
+							computedState = rule.TargetState
+						}
+						break
+					}
+				}
+				break // Only apply the first matching condition
+			}
+		}
+	}
 
 	labels := state.Info.Labels
 	if labels == nil {
@@ -161,11 +197,13 @@ func buildProtoSensor(state *storage.SensorState) *v1.Sensor {
 		Spec: &v1.SensorSpec{
 			GracefulPeriodSeconds: state.Info.GracefulPeriod,
 			FailurePeriodSeconds:  state.Info.FailurePeriod,
+			Rules:                 state.Info.ConditionRules,
 		},
 		Status: &v1.SensorStatus{
 			State:                computedState,
 			LastUpdatedTimestamp: state.LastUpdated,
-			ReportedData:         state.Metadata,
+			ReportedData:         state.ReportedData,
+			Conditions:           conditions,
 		},
 	}
 }
@@ -175,7 +213,8 @@ func (s *QiVitalsService) GetSensor(ctx context.Context, id string) (*v1.Sensor,
 	if err != nil {
 		return nil, err
 	}
-	return buildProtoSensor(state), nil
+	conditions := s.evaluateConditions(ctx, state)
+	return buildProtoSensor(state, conditions), nil
 }
 
 func calculateSensorStatus(state *storage.SensorState) string {
