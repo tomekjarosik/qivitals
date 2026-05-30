@@ -55,10 +55,6 @@ func NewAuthenticator(cfg *UsersConfig, linkStore MagicLinkStore) (*Authenticato
 	emailToUser := make(map[string]string)
 
 	for username, userCfg := range cfg.Users {
-		if len(userCfg.PublicKeys) == 0 {
-			continue
-		}
-
 		keysMap := make(map[string]*SSHKey)
 		for _, keyStr := range userCfg.PublicKeys {
 			sshKey, _, _, _, err := ssh.ParseAuthorizedKey([]byte(keyStr))
@@ -80,11 +76,6 @@ func NewAuthenticator(cfg *UsersConfig, linkStore MagicLinkStore) (*Authenticato
 			}
 		}
 
-		if len(keysMap) == 0 {
-			log.Printf("no valid keys configured for user: %s", username)
-			continue
-		}
-
 		users[username] = &UserRecord{
 			Keys:       keysMap,
 			Namespaces: userCfg.Namespaces,
@@ -96,6 +87,7 @@ func NewAuthenticator(cfg *UsersConfig, linkStore MagicLinkStore) (*Authenticato
 			}
 			emailToUser[email] = username
 		}
+		fmt.Printf("found user: %v", userCfg)
 	}
 
 	// Generate secure Ed25519 keypair for Web/Magic Link flows
