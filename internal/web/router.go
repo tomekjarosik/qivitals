@@ -16,8 +16,13 @@ type Router struct {
 }
 
 // NewRouter assembles the multiplexer.
-func NewRouter(gateway, dashboard, details http.Handler) http.Handler {
+func NewRouter(gateway, dashboard, details, authHandler http.Handler) http.Handler {
 	mux := http.NewServeMux()
+
+	// Auth Routes (Exact matches override the gateway)
+	mux.Handle("/login", authHandler)       // Serves the login HTML page
+	mux.Handle("/auth/verify", authHandler) // Handles GET from email link
+	mux.Handle("/logout", authHandler)      // Handles Logout
 
 	// API Gateway Route
 	mux.Handle("/api/", gateway)

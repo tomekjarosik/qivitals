@@ -103,7 +103,7 @@ func (s *magicLinkServer) SendMagicLink(ctx context.Context, req *v1.SendMagicLi
 	}
 
 	baseURL := s.cfg.AppBaseURL
-	loginURL := fmt.Sprintf("%s/auth/verify?token=%s", baseURL, url.QueryEscape(tokenStr))
+	loginURL := fmt.Sprintf("https://%s/auth/verify?token=%s", baseURL, url.QueryEscape(tokenStr))
 
 	// Render Templates
 	data := emailData{

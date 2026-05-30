@@ -20,6 +20,7 @@ import (
 	"github.com/tomekjarosik/qivitals/internal/middleware"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/protobuf/proto"
 )
 
 // App represents the composed gRPC + HTTP gateway + Web UI application.
@@ -148,6 +149,23 @@ func NewGatewayHandler(ctx context.Context, grpcAddr string, certFile string) (h
 	mux := runtime.NewServeMux(
 		runtime.WithMetadata(auth.GatewayToGRPCMetadataAnnotator),
 	)
+	runtime.WithForwardResponseOption(func(ctx context.Context, w http.ResponseWriter, m proto.Message) error {
+		if resp, ok := m.(*v1.ValidateMagicLinkResponse); ok && resp.SessionToken != "" {
+			http.SetCookie(w, &http.Cookie{
+				Name:     auth.SessionCookieName,
+				Value:    resp.SessionToken,
+				Path:     "/",
+				HttpOnly: true,                 // XSS Protection
+				Secure:   true,                 // HTTPS
+				SameSite: http.SameSiteLaxMode, // CSRF Protection
+				MaxAge:   86400,                // 24 hours
+				Expires:  time.Now().Add(24 * time.Hour),
+			})
+
+			w.Header().Set("HX-Redirect", "/")
+		}
+		return nil
+	})
 
 	// Since the server is secure, the internal gateway client must trust the certificate
 	creds, err := credentials.NewClientTLSFromFile(certFile, "")

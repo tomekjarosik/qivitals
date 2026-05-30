@@ -10,6 +10,7 @@ import (
 	"time"
 
 	v1 "github.com/tomekjarosik/qivitals/gen/api/qivitals/v1"
+	"github.com/tomekjarosik/qivitals/internal/auth"
 	"github.com/tomekjarosik/qivitals/internal/web"
 	"github.com/tomekjarosik/qivitals/internal/web/models"
 	"github.com/tomekjarosik/qivitals/internal/web/models/components"
@@ -17,12 +18,17 @@ import (
 )
 
 type DashboardHandler struct {
-	renderer web.Renderer
-	client   v1.QiVitalsServiceClient
+	renderer      web.Renderer
+	client        v1.QiVitalsServiceClient
+	authenticator *auth.Authenticator
 }
 
-func NewDashboardHandler(renderer web.Renderer, client v1.QiVitalsServiceClient) *DashboardHandler {
-	return &DashboardHandler{renderer: renderer, client: client}
+func NewDashboardHandler(renderer web.Renderer, client v1.QiVitalsServiceClient, authenticator *auth.Authenticator) *DashboardHandler {
+	return &DashboardHandler{
+		renderer:      renderer,
+		client:        client,
+		authenticator: authenticator,
+	}
 }
 
 func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -101,12 +107,27 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Groups: groups,
 		Empty:  empty,
 	}
+	isAuthenticated := false
+	userName := ""
+
+	// Extract and verify the entity directly from the HTTP request
+	entity, err := h.authenticator.EntityFromRequest(r)
+	if err == nil && entity != nil {
+		isAuthenticated = true
+
+		// Type assert to *auth.User to grab the ID (which holds the mapped username)
+		if user, ok := entity.(*auth.User); ok {
+			userName = user.ID
+		}
+	}
 
 	pageData := models.DashboardPageView{
-		Now:        time.Now().Format("2006-01-02 15:04:05"),
-		FullURL:    r.URL.RequestURI(),
-		SensorGrid: sensorGridData,
-		Filter:     filter,
+		Now:           time.Now().Format("2006-01-02 15:04:05"),
+		FullURL:       r.URL.RequestURI(),
+		SensorGrid:    sensorGridData,
+		Filter:        filter,
+		Authenticated: isAuthenticated,
+		Username:      userName,
 	}
 
 	isHTMX := r.Header.Get("HX-Request") == "true"

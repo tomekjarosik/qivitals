@@ -1,0 +1,83 @@
+{{define "login-page"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - QiVitals</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.11"></script>
+    <!-- Add the json-enc extension to send JSON to the gRPC gateway -->
+    <script src="https://unpkg.com/htmx.org/dist/ext/json-enc.js"></script>
+</head>
+<body class="bg-gradient-to-br from-slate-50 to-indigo-50/50 min-h-screen font-sans antialiased text-slate-800 flex items-center justify-center p-4">
+
+<div class="w-full max-w-md">
+    <div class="text-center mb-8">
+        <h1 class="text-3xl font-bold tracking-tight">
+            <span class="bg-gradient-to-r from-indigo-600 to-blue-500 bg-clip-text text-transparent">QiVitals</span>
+        </h1>
+        <p class="mt-2 text-sm text-slate-500">System health at a glance</p>
+    </div>
+
+    <div class="bg-white/80 backdrop-blur p-8 rounded-2xl shadow-xl border border-slate-200/60">
+        <div id="login-form-container">
+            <h2 class="text-xl font-semibold text-slate-800 mb-1">Welcome back</h2>
+            <p class="text-sm text-slate-500 mb-6">Enter your email to receive a secure login link.</p>
+
+            <!-- 2. Update form attributes -->
+            <form hx-post="/api/v1/magiclink/send"
+                  hx-target="#login-form-container"
+                  hx-ext="json-enc"
+                  hx-indicator="#spinner"
+                  hx-on::before-swap="
+                    if(event.detail.successful) {
+                      // Prevent HTMX from swapping the raw JSON '{&quot;sent&quot;:true}' into the DOM
+                      event.detail.shouldSwap = false;
+
+                      // Grab the email and inject the success UI
+                      const email = document.getElementById('email').value;
+                      document.getElementById('login-form-container').innerHTML = `
+                        <div class='text-center py-4'>
+                          <div class='mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-emerald-100 mb-4'>
+                            <svg class='h-6 w-6 text-emerald-600' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                              <path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z' />
+                            </svg>
+                          </div>
+                          <h3 class='text-lg font-semibold text-slate-800 mb-1'>Check your inbox</h3>
+                          <p class='text-sm text-slate-500'>We've sent a secure login link to<br><span class='font-medium text-slate-700'>${email}</span></p>
+                          <p class='text-xs text-slate-400 mt-4'>The link will expire in 15 minutes.</p>
+                        </div>`;
+                    }
+                  ">
+
+                <div class="space-y-4">
+                    <div>
+                        <label for="email" class="block text-sm font-medium text-slate-700 mb-1">Email address</label>
+                        <input type="email" name="email" id="email" required
+                               class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                               placeholder="you@example.com">
+                    </div>
+
+                    <button type="submit"
+                            class="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 px-4 rounded-lg transition-colors text-sm shadow-sm">
+                        <span>Send Magic Link</span>
+                        <!-- HTMX Spinner -->
+                        <svg id="spinner" class="htmx-indicator animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <p class="text-center text-xs text-slate-400 mt-6">
+        Secured by Ed25519 & Magic Links
+    </p>
+</div>
+
+</body>
+</html>
+{{end}}

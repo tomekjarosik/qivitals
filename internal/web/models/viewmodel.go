@@ -108,10 +108,12 @@ type SensorGridData struct {
 
 // DashboardPageView is the top‑level data for the dashboard page.
 type DashboardPageView struct {
-	Now        string
-	FullURL    string
-	SensorGrid SensorGridData
-	Filter     FilterView
+	Now           string
+	FullURL       string
+	SensorGrid    SensorGridData
+	Filter        FilterView
+	Authenticated bool
+	Username      string
 }
 
 // SensorDetailPageView is the data for the /sensors/{id} page.

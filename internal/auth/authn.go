@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"net/http"
 	"strings"
 	"time"
 
@@ -203,6 +204,21 @@ func (a *Authenticator) verifyToken(tokenStr string) (Entity, error) {
 		AllowedNamespaces: namespaces,
 		Type:              tokenType,
 	}, nil
+}
+
+// EntityFromRequest is used for WebUI
+func (a *Authenticator) EntityFromRequest(r *http.Request) (Entity, error) {
+	tokenHeader := GetTokenFromRequest(r)
+	if tokenHeader == "" {
+		return nil, fmt.Errorf("no authorization token found")
+	}
+
+	tokenStr, found := strings.CutPrefix(tokenHeader, BearerPrefix)
+	if !found {
+		return nil, fmt.Errorf("invalid authorization format")
+	}
+
+	return a.verifyToken(tokenStr)
 }
 
 // SessionClaims represents a long-lived web session

@@ -10,7 +10,7 @@ import (
 
 const (
 	// SessionCookieName is the name of the cookie containing the JWT.
-	SessionCookieName = "session_token"
+	SessionCookieName = "qivitals_session_token"
 
 	// AuthHeaderKey is the HTTP/gRPC metadata key for authorization.
 	// Note: gRPC metadata keys are case-insensitive, but lowercase is standard.

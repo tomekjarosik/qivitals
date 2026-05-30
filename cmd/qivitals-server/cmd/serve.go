@@ -71,6 +71,9 @@ func runServe(cmd *cobra.Command, args []string) error {
 	if viper.GetBool("verbose") {
 		fmt.Printf("Server Config: %+v\n", cfg)
 	}
+	if err := cfg.Validate(); err != nil {
+		return err
+	}
 
 	ctx, cancel := context.WithCancel(cmd.Context())
 	defer cancel()
@@ -104,13 +107,15 @@ func runServe(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize gateway: %w", err)
 	}
-
-	dashboard := handlers.NewDashboardHandler(renderer, grpcClient)
-	details := handlers.NewSensorDetailsHandler(renderer, grpcClient)
-
-	webRouter := web.NewRouter(gateway, dashboard, details)
 	magicLinkStore := auth.NewMagicLinkStore()
 	authenticator, err := auth.NewAuthenticator(cfg.Auth, magicLinkStore)
+
+	dashboard := handlers.NewDashboardHandler(renderer, grpcClient, authenticator)
+	details := handlers.NewSensorDetailsHandler(renderer, grpcClient)
+	authHandler := handlers.NewWebAuthHandler(renderer, authenticator)
+
+	webRouter := web.NewRouter(gateway, dashboard, details, authHandler)
+
 	if err != nil {
 		return fmt.Errorf("failed to initialize authenticator: %w", err)
 	}
@@ -119,7 +124,11 @@ func runServe(cmd *cobra.Command, args []string) error {
 	case "file":
 		emailSender = email.NewFileEmailSender(cfg.Email.FilePath)
 	default:
-		emailSender = email.NewSystemSender(cfg.Email.FromEmail)
+		emailSender = email.NewSMTPSender(
+			cfg.Email.FromEmail,
+			cfg.Email.HostPort,
+			cfg.Email.Username,
+			cfg.Email.Password)
 	}
 
 	app := server.NewApp(cfg, qivitalsSvc, webRouter, authenticator, emailSender)
