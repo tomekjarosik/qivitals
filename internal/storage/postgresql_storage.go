@@ -48,10 +48,10 @@ func (p *PostgresSensorStorage) InitSchema(ctx context.Context) error {
 		last_reported BIGINT NOT NULL,
 	    last_spec_updated BIGINT NOT NULL DEFAULT 0,
 		metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+	    condition_rules JSONB DEFAULT '[]'::jsonb,
 		CONSTRAINT unique_namespace_name UNIQUE (namespace, name)
 	);
 	CREATE INDEX IF NOT EXISTS idx_sensors_labels ON sensors USING GIN (labels);
-	ALTER TABLE sensors ADD COLUMN condition_rules JSONB DEFAULT '[]'::jsonb;
 	`
 	_, err := p.pool.Exec(ctx, query)
 	return err
