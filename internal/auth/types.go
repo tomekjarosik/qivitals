@@ -18,9 +18,10 @@ type User struct {
 	ID string
 	// AllowedNamespaces — if nil or empty, user is admin (all namespaces).
 	AllowedNamespaces []string
+	Type              string
 }
 
-func (u *User) TokenType() string    { return "user" }
+func (u *User) TokenType() string    { return u.Type }
 func (u *User) SubjectID() string    { return u.ID }
 func (u *User) Namespaces() []string { return u.AllowedNamespaces }
 
@@ -44,8 +45,8 @@ func (u *User) HasAccessToNamespace(ns string) bool {
 // contextKey is the unexported key type for storing Entity in context.
 type contextKey struct{}
 
-// AuthEntityFromContext retrieves the Entity stored in ctx.
-func AuthEntityFromContext(ctx context.Context) Entity {
+// EntityFromContext retrieves the Entity stored in ctx.
+func EntityFromContext(ctx context.Context) Entity {
 	entity, _ := ctx.Value(contextKey{}).(Entity)
 	return entity
 }

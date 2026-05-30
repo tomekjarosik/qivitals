@@ -32,7 +32,6 @@ func initConfig(configFile string) error {
 	// So, if the user sets GRPC_PORT, Viper maps it to "grpc.port" or "grpc-port"
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
 
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
 	if err := viper.ReadInConfig(); err != nil {
 		// Print a clear message instead of silently swallowing.
 		fmt.Fprintf(os.Stderr, "[config] using: %s\n", viper.ConfigFileUsed())

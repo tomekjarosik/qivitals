@@ -29,7 +29,7 @@ func NewAuthorizedService(inner v1.QiVitalsServiceServer, store SensorResolver) 
 
 // RegisterSensor user must have access to the target namespace
 func (m *ServiceAuthMiddleware) RegisterSensor(ctx context.Context, req *v1.RegisterSensorRequest) (*v1.RegisterSensorResponse, error) {
-	user := auth.AuthEntityFromContext(ctx)
+	user := auth.EntityFromContext(ctx)
 	if user == nil {
 		return nil, status.Error(codes.Unauthenticated, "registration requires authentication")
 	}
@@ -62,7 +62,7 @@ func (m *ServiceAuthMiddleware) ReportSensor(ctx context.Context, req *v1.Report
 
 // DeleteSensor look up target's namespace via NamespaceResolver, then check user access ---
 func (m *ServiceAuthMiddleware) DeleteSensor(ctx context.Context, req *v1.DeleteSensorRequest) (*v1.DeleteSensorResponse, error) {
-	user := auth.AuthEntityFromContext(ctx)
+	user := auth.EntityFromContext(ctx)
 	if user == nil {
 		return nil, status.Error(codes.Unauthenticated, "deletion requires authentication")
 	}
@@ -84,7 +84,7 @@ func (m *ServiceAuthMiddleware) DeleteSensor(ctx context.Context, req *v1.Delete
 
 // PatchSensor same pattern as DeleteSensor
 func (m *ServiceAuthMiddleware) PatchSensor(ctx context.Context, req *v1.PatchSensorRequest) (*v1.PatchSensorResponse, error) {
-	user := auth.AuthEntityFromContext(ctx)
+	user := auth.EntityFromContext(ctx)
 	if user == nil {
 		return nil, status.Error(codes.Unauthenticated, "patching requires authentication")
 	}
@@ -106,7 +106,7 @@ func (m *ServiceAuthMiddleware) PatchSensor(ctx context.Context, req *v1.PatchSe
 
 // QuerySensors enforce the namespace filter at query time ---
 func (m *ServiceAuthMiddleware) QuerySensors(ctx context.Context, req *v1.QuerySensorsRequest) (*v1.QuerySensorsResponse, error) {
-	user := auth.AuthEntityFromContext(ctx)
+	user := auth.EntityFromContext(ctx)
 	if user != nil {
 		canonicallog.AddField(ctx, "entity.subject", user.SubjectID())
 	}

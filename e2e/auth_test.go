@@ -13,7 +13,7 @@ import (
 
 func TestWorkflow_UnauthorizedNamespaceRegistration(t *testing.T) {
 	serverCmd := startTestServer(t)
-	defer serverCmd.Process.Kill()
+	defer stopTestServer(t, serverCmd)
 
 	// Try to register a sensor in a namespace the test user doesn't have access to
 	// The config only allows: default, home, infra, app, chores, temp, network
@@ -47,7 +47,7 @@ func TestWorkflow_UnauthorizedNamespaceRegistration(t *testing.T) {
 
 func TestWorkflow_UnauthorizedNamespaceDelete(t *testing.T) {
 	serverCmd := startTestServer(t)
-	defer serverCmd.Process.Kill()
+	defer stopTestServer(t, serverCmd)
 
 	// Register a sensor in an unauthorized namespace (this should fail)
 	financeID, stderr := runCLIwithErr(t, "register --namespace finance --name secret-budget --description 'Secret budget' --graceful 1h --failure 2h")
@@ -62,7 +62,7 @@ func TestWorkflow_UnauthorizedNamespaceDelete(t *testing.T) {
 
 func TestWorkflow_CrossNamespaceAccess(t *testing.T) {
 	serverCmd := startTestServer(t)
-	defer serverCmd.Process.Kill()
+	defer stopTestServer(t, serverCmd)
 
 	// Register sensors in different namespaces that user has access to
 	infraID := strings.TrimSpace(runCLI(t, "register --namespace infra --name infra-sensor --description 'Infrastructure sensor' --graceful 1h --failure 2h"))
@@ -95,7 +95,7 @@ func TestWorkflow_CrossNamespaceAccess(t *testing.T) {
 
 func TestWorkflow_SensorStateUnauthorized(t *testing.T) {
 	serverCmd := startTestServer(t)
-	defer serverCmd.Process.Kill()
+	defer stopTestServer(t, serverCmd)
 
 	// Register sensor in authorized namespace
 	id := strings.TrimSpace(runCLI(t, "register --namespace home --name test-sensor --description 'Test sensor' --graceful 1h --failure 2h"))

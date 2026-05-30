@@ -1,0 +1,28 @@
+syntax = "proto3";
+package auth.v1;
+
+option go_package = "github.com/tomekjarosik/qivitals/api/qivitals/v1";
+
+import "google/api/annotations.proto";
+
+service MagicLinkService {
+  rpc SendMagicLink(SendMagicLinkRequest) returns (SendMagicLinkResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/magiclink/send"
+      body: "*"
+    };
+  };
+
+  rpc ValidateMagicLink(ValidateMagicLinkRequest) returns (ValidateMagicLinkResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/magiclink/verify"
+      body: "*"
+    };
+  }
+}
+
+message SendMagicLinkRequest { string email = 1; }
+message SendMagicLinkResponse { bool sent = 1; }
+
+message ValidateMagicLinkRequest { string token = 1; }
+message ValidateMagicLinkResponse { string session_token = 1; }

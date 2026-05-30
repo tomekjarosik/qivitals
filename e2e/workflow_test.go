@@ -14,7 +14,7 @@ import (
 // TestWorkflow_MonthlyBills tests a manual sensor registration and data reporting.
 func TestWorkflow_MonthlyBills(t *testing.T) {
 	serverCmd := startTestServer(t)
-	defer serverCmd.Process.Kill()
+	defer stopTestServer(t, serverCmd)
 
 	// Setup: Register sensor
 	stdout := runCLI(t, "register --namespace home --name water-bill --description 'Monthly water utility bill' --graceful 30d --failure 35d --label category=bills")
@@ -49,7 +49,7 @@ func TestWorkflow_MonthlyBills(t *testing.T) {
 
 func TestWorkflow_ITInfrastructure(t *testing.T) {
 	serverCmd := startTestServer(t)
-	defer serverCmd.Process.Kill()
+	defer stopTestServer(t, serverCmd)
 
 	// 1. Register Sensors
 	tlsID := strings.TrimSpace(runCLI(t, "register --namespace infra --name tls-jarosik-online --description 'TLS cert for main domain' --graceful 60d --failure 90d"))
@@ -97,7 +97,7 @@ func TestWorkflow_ITInfrastructure(t *testing.T) {
 
 func TestWorkflow_HomeNetwork(t *testing.T) {
 	serverCmd := startTestServer(t)
-	defer serverCmd.Process.Kill()
+	defer stopTestServer(t, serverCmd)
 
 	// Register sensor
 	id := strings.TrimSpace(runCLI(t, "register --namespace network --name isp-connection --description 'Internet connectivity check' --graceful 120s --failure 300s --label location=home"))
@@ -125,7 +125,7 @@ func TestWorkflow_HomeNetwork(t *testing.T) {
 
 func TestWorkflow_FamilyChores(t *testing.T) {
 	serverCmd := startTestServer(t)
-	defer serverCmd.Process.Kill()
+	defer stopTestServer(t, serverCmd)
 
 	// Register sensors
 	dogID := strings.TrimSpace(runCLI(t, "register --namespace chores --name feed-dog --description 'Feed the dog' --graceful 14h --failure 24h"))
@@ -157,7 +157,7 @@ func TestWorkflow_FamilyChores(t *testing.T) {
 
 func TestWorkflow_TemporaryProject(t *testing.T) {
 	serverCmd := startTestServer(t)
-	defer serverCmd.Process.Kill()
+	defer stopTestServer(t, serverCmd)
 
 	// Register sensor
 	id := strings.TrimSpace(runCLI(t, "register --namespace temp --name build-job-123 --description 'Short-lived build job' --graceful 1h --failure 2h"))
@@ -180,7 +180,7 @@ func TestWorkflow_TemporaryProject(t *testing.T) {
 
 func TestWorkflow_AdvancedQueryFiltering(t *testing.T) {
 	serverCmd := startTestServer(t)
-	defer serverCmd.Process.Kill()
+	defer stopTestServer(t, serverCmd)
 
 	// Register helpers
 	reg := func(ns, name string) {
@@ -219,7 +219,7 @@ func TestWorkflow_AdvancedQueryFiltering(t *testing.T) {
 
 func TestWorkflow_Update_Success(t *testing.T) {
 	serverCmd := startTestServer(t)
-	defer serverCmd.Process.Kill()
+	defer stopTestServer(t, serverCmd)
 
 	// 1. Register baseline
 	sensorID := strings.TrimSpace(runCLI(t, "register --namespace staging --name web-api --description 'Primary API server' --graceful 1h --failure 2h --label env=prod --label tier=backend"))

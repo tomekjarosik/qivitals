@@ -20,7 +20,7 @@ func NewRouter(gateway, dashboard, details http.Handler) http.Handler {
 	mux := http.NewServeMux()
 
 	// API Gateway Route
-	mux.Handle("/api/", http.StripPrefix("/api", gateway))
+	mux.Handle("/api/", gateway)
 
 	// UI Routes
 	mux.Handle("/sensors/{id}", details)

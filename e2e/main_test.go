@@ -97,23 +97,42 @@ func TestMain(m *testing.M) {
 
 	config := map[string]interface{}{
 		"server": map[string]interface{}{
-			"address":            "localhost:50099",
-			"log_file":           filepath.Join(tempDir, "qivitals.log"),
-			"tls_cert_file":      certPath,
-			"tls_key_file":       keyPathCert,
-			"database_url":       "", // Use in-memory
-			"database_max_conns": 10,
-			"auth": map[string]interface{}{
-				"users": map[string]interface{}{
-					"testuser": map[string]interface{}{
-						"publicKeys": []string{pubKeyStr},
-						"namespaces": namespaces,
-					},
+			"address": serverAddress,
+		},
+		"database": map[string]interface{}{
+			"url":       "", // Use in-memory
+			"max_conns": 10,
+		},
+		"log": map[string]interface{}{
+			"file":  filepath.Join(tempDir, "qivitals.log"),
+			"level": "debug",
+		},
+		"tls": map[string]interface{}{
+			"enabled":   true,
+			"cert_file": certPath,
+			"key_file":  keyPathCert,
+		},
+		"auth": map[string]interface{}{
+			"users": map[string]interface{}{
+				"testuser": map[string]interface{}{
+					"public_keys": []string{pubKeyStr},
+					"namespaces":  namespaces,
+					"emails":      []string{"testuser@qivitals.local"}, // Added for Magic Link routing
 				},
 			},
 		},
+		"magic_link": map[string]interface{}{
+			"app_base_url": "http://localhost:3000", // Required by Validate()
+			"app_name":     "Qivitals E2E",
+			"from_email":   "noreply@qivitals.local", // Required by Validate()
+		},
+		"email": map[string]interface{}{
+			"sender_type": "file",
+			"file_path":   filepath.Join(tempDir, "emails.jsonl"),
+			"from_email":  "noreply@qivitals.local",
+		},
 		"cli": map[string]interface{}{
-			"url":          "localhost:50099",
+			"url":          serverAddress,
 			"tls_insecure": true, // Enable TLS for tests
 			"verbose":      false,
 			"machine":      false,
@@ -166,6 +185,12 @@ func startTestServer(t *testing.T) *exec.Cmd {
 	err := cmd.Start()
 	require.NoError(t, err, "Failed to start test server")
 
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("\n--- SERVER STDOUT ---\n%s", outBuf.String())
+			t.Logf("\n--- SERVER STDERR ---\n%s", errBuf.String())
+		}
+	})
 	// Wait for port to open
 	// We capture the result to print logs if it fails
 	require.Eventually(t, func() bool {
@@ -178,6 +203,30 @@ func startTestServer(t *testing.T) *exec.Cmd {
 	}, 3*time.Second, 100*time.Millisecond, "Server failed to start in time")
 
 	return cmd
+}
+
+// stopTestServer gracefully shuts down the server and waits for the port to be released.
+func stopTestServer(t *testing.T, cmd *exec.Cmd) {
+	if cmd == nil || cmd.Process == nil {
+		return
+	}
+
+	cmd.Process.Signal(os.Interrupt)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- cmd.Wait()
+	}()
+
+	select {
+	case <-done:
+		// Success: process exited cleanly and port is released
+	case <-time.After(3 * time.Second):
+		// Timeout: force kill if it hangs
+		t.Log("Server did not exit gracefully, forcing kill")
+		cmd.Process.Kill()
+		<-done // Reap the zombie process
+	}
 }
 
 // runCLI executes the compiled CLI binary. It automatically injects QIVITALS_CONFIG.

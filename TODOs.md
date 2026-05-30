@@ -1,7 +1,9 @@
 # TODOs
 
 Small:
-[ ] - implement sensor conditions (e.g. something that decides if a sensor is green based on its reported data)
+- implement magic link approach to current authorization
+  - add "web_authorization_key" to the config to sign logins
+  - 
 
 
 Long term:
@@ -16,3 +18,6 @@ Long term:
 [ ] - update statuses in DB based on current time: find all statuses that need update first, and then calculate their update
 [ ] - webUI: add ability to edit statuses grace period and failure period
 [ ] - webUI: add ability to add built-in sensors like DNS domains or TLS certs
+
+
+

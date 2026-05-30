@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/tomekjarosik/qivitals/internal/auth"
 	"github.com/tomekjarosik/qivitals/internal/database"
+	"github.com/tomekjarosik/qivitals/internal/email"
 	"github.com/tomekjarosik/qivitals/internal/server"
 	"github.com/tomekjarosik/qivitals/internal/storage"
 	"github.com/tomekjarosik/qivitals/internal/web"
@@ -62,7 +64,7 @@ func NewCmdServe() *cobra.Command {
 
 func runServe(cmd *cobra.Command, args []string) error {
 	var cfg server.Config
-	if err := viper.UnmarshalKey("server", &cfg); err != nil {
+	if err := viper.Unmarshal(&cfg); err != nil {
 		return err
 	}
 
@@ -74,14 +76,14 @@ func runServe(cmd *cobra.Command, args []string) error {
 	defer cancel()
 
 	var store storage.SensorStorage
-	if cfg.DatabaseURL == "" {
+	if cfg.Database.URL == "" {
 		log.Println("WARNING: Using in-memory storage only")
 		store = storage.NewMemorySensorStorage()
-	} else if cfg.DatabaseURL == "naive-file" {
+	} else if cfg.Database.URL == "naive-file" {
 		log.Println("WARNING: Using in-memory storage with naive periodic persistence")
 		store = storage.NewSnapshotStorage(storage.NewMemorySensorStorage(), "qivitals.data", 5*time.Second)
 	} else {
-		dbPool, err := database.NewPostgresPool(ctx, cfg.DatabaseURL, cfg.MaxConns)
+		dbPool, err := database.NewPostgresPool(ctx, cfg.Database.URL, cfg.Database.MaxConns)
 		if err != nil {
 			return err
 		}
@@ -98,7 +100,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	renderer := web.NewTemplateRenderer()
 
 	// Initialize individual handlers, passing the certificate file path for internal dialing
-	gateway, grpcClient, err := server.NewGatewayHandler(ctx, cfg.Address, cfg.TLSCertFile)
+	gateway, grpcClient, err := server.NewGatewayHandler(ctx, cfg.Server.Address, cfg.TLS.CertFile)
 	if err != nil {
 		return fmt.Errorf("failed to initialize gateway: %w", err)
 	}
@@ -107,8 +109,19 @@ func runServe(cmd *cobra.Command, args []string) error {
 	details := handlers.NewSensorDetailsHandler(renderer, grpcClient)
 
 	webRouter := web.NewRouter(gateway, dashboard, details)
-	authenticator := auth.NewAuthenticator(cfg.Auth)
+	magicLinkStore := auth.NewMagicLinkStore()
+	authenticator, err := auth.NewAuthenticator(cfg.Auth, magicLinkStore)
+	if err != nil {
+		return fmt.Errorf("failed to initialize authenticator: %w", err)
+	}
+	var emailSender email.Sender
+	switch strings.ToLower(cfg.Email.SenderType) {
+	case "file":
+		emailSender = email.NewFileEmailSender(cfg.Email.FilePath)
+	default:
+		emailSender = email.NewSystemSender(cfg.Email.FromEmail)
+	}
 
-	app := server.NewApp(cfg, qivitalsSvc, webRouter, authenticator)
+	app := server.NewApp(cfg, qivitalsSvc, webRouter, authenticator, emailSender)
 	return app.Run(ctx)
 }

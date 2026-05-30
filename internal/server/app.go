@@ -16,6 +16,7 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/tomekjarosik/qivitals/gen/api/qivitals/v1"
 	"github.com/tomekjarosik/qivitals/internal/auth"
+	"github.com/tomekjarosik/qivitals/internal/email"
 	"github.com/tomekjarosik/qivitals/internal/middleware"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -27,41 +28,53 @@ type App struct {
 	service       *QiVitalsService
 	webHandler    http.Handler
 	authenticator *auth.Authenticator
+	emailSender   email.Sender
 }
 
-func NewApp(cfg Config, svc *QiVitalsService, webHandler http.Handler, authenticator *auth.Authenticator) *App {
+func NewApp(cfg Config, svc *QiVitalsService, webHandler http.Handler, authenticator *auth.Authenticator, emailSender email.Sender) *App {
 	return &App{
 		config:        cfg,
 		service:       svc,
 		webHandler:    webHandler,
 		authenticator: authenticator,
+		emailSender:   emailSender,
 	}
 }
 
-func setupLogger(logFilePath string) (logger *slog.Logger, cleanup func(), err error) {
-	if logFilePath == "" {
-		consoleHandler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-			AddSource: true,
-		})
-		return slog.New(consoleHandler), func() {}, nil
+// setupLogger now accepts the LogConfig struct and supports log levels.
+func setupLogger(cfg LogConfig) (*slog.Logger, func(), error) {
+	var level slog.Level
+	switch strings.ToLower(cfg.Level) {
+	case "debug":
+		level = slog.LevelDebug
+	case "warn", "warning":
+		level = slog.LevelWarn
+	case "error":
+		level = slog.LevelError
+	default:
+		level = slog.LevelInfo
 	}
 
-	logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	opts := &slog.HandlerOptions{
+		AddSource: level == slog.LevelDebug, // Only add source code location in debug mode
+		Level:     level,
+	}
+
+	if cfg.File == "" {
+		return slog.New(slog.NewTextHandler(os.Stdout, opts)), func() {}, nil
+	}
+
+	logFile, err := os.OpenFile(cfg.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		return nil, func() {}, fmt.Errorf("failed to open log file: %w", err)
 	}
 
-	fileHandler := slog.NewJSONHandler(logFile, &slog.HandlerOptions{
-		AddSource: true,
-	})
-	cleanup = func() {
-		logFile.Close()
-	}
-	return slog.New(fileHandler), cleanup, nil
+	cleanup := func() { logFile.Close() }
+	return slog.New(slog.NewJSONHandler(logFile, opts)), cleanup, nil
 }
 
 func (a *App) Run(ctx context.Context) error {
-	logger, cleanupLogger, err := setupLogger(a.config.LogFile)
+	logger, cleanupLogger, err := setupLogger(a.config.Log)
 	if err != nil {
 		return fmt.Errorf("failed to setup logger: %w", err)
 	}
@@ -80,7 +93,7 @@ func (a *App) Run(ctx context.Context) error {
 	})
 
 	httpServer := &http.Server{
-		Addr:    a.config.Address,
+		Addr:    a.config.Server.Address,
 		Handler: mixedHandler,
 	}
 
@@ -89,8 +102,8 @@ func (a *App) Run(ctx context.Context) error {
 
 	// Start unified Secure Server (HTTPS + gRPC)
 	go func() {
-		logger.Info("Secure unified server listening", slog.String("address", a.config.Address))
-		if err := httpServer.ListenAndServeTLS(a.config.TLSCertFile, a.config.TLSKeyFile); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		logger.Info("Secure unified server listening", slog.String("address", a.config.Server.Address))
+		if err := httpServer.ListenAndServeTLS(a.config.TLS.CertFile, a.config.TLS.KeyFile); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("Server error: %v", err)
 		}
 	}()
@@ -124,6 +137,9 @@ func (a *App) newGRPCServer(logger *slog.Logger) *grpc.Server {
 	authorizedService := NewAuthorizedService(a.service, a.service)
 	v1.RegisterQiVitalsServiceServer(grpcServer, authorizedService)
 
+	magicLinkSvc := NewMagicLinkServer(a.config.MagicLink, a.authenticator, a.emailSender)
+	v1.RegisterMagicLinkServiceServer(grpcServer, magicLinkSvc)
+
 	return grpcServer
 }
 
@@ -148,6 +164,9 @@ func NewGatewayHandler(ctx context.Context, grpcAddr string, certFile string) (h
 	}
 
 	if err := v1.RegisterQiVitalsServiceHandler(ctx, mux, conn); err != nil {
+		return nil, nil, err
+	}
+	if err := v1.RegisterMagicLinkServiceHandler(ctx, mux, conn); err != nil {
 		return nil, nil, err
 	}
 
