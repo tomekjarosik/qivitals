@@ -87,13 +87,21 @@ func NewAuthenticator(cfg *UsersConfig, linkStore MagicLinkStore) (*Authenticato
 			}
 			emailToUser[email] = username
 		}
-		fmt.Printf("found user: %v", userCfg)
+		log.Printf("configured user: %s | emails: %s | namespaces: %s",
+			username,
+			strings.Join(userCfg.Emails, ", "),
+			strings.Join(userCfg.Namespaces, ", "))
 	}
 
 	// Generate secure Ed25519 keypair for Web/Magic Link flows
 	webPub, webPriv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		return nil, fmt.Errorf("generate web auth key: %w", err)
+
+	// If WebKey path is configured, load from file; otherwise generate ephemeral
+	if cfg.WebKey != "" {
+		webPriv, webPub, err = LoadKeyPair(cfg.WebKey)
+		if err != nil {
+			return nil, fmt.Errorf("load web key from %s: %w", cfg.WebKey, err)
+		}
 	}
 
 	return &Authenticator{

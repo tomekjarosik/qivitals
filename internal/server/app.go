@@ -16,12 +16,15 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/tomekjarosik/qivitals/gen/api/qivitals/v1"
 	"github.com/tomekjarosik/qivitals/internal/auth"
-	"github.com/tomekjarosik/qivitals/internal/email"
 	"github.com/tomekjarosik/qivitals/internal/middleware"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/protobuf/proto"
 )
+
+type EmailSender interface {
+	Send(ctx context.Context, to, subject, textBody, htmlBody string) error
+}
 
 // App represents the composed gRPC + HTTP gateway + Web UI application.
 type App struct {
@@ -29,10 +32,10 @@ type App struct {
 	service       *QiVitalsService
 	webHandler    http.Handler
 	authenticator *auth.Authenticator
-	emailSender   email.Sender
+	emailSender   EmailSender
 }
 
-func NewApp(cfg Config, svc *QiVitalsService, webHandler http.Handler, authenticator *auth.Authenticator, emailSender email.Sender) *App {
+func NewApp(cfg Config, svc *QiVitalsService, webHandler http.Handler, authenticator *auth.Authenticator, emailSender EmailSender) *App {
 	return &App{
 		config:        cfg,
 		service:       svc,

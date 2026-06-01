@@ -46,6 +46,7 @@ and automated endpoint monitoring, all stored in PostgreSQL and served via HTTP/
 	rootCmd.AddCommand(
 		NewCmdServe(),
 		NewCmdGenerateCerts(),
+		NewCmdGenerateWebkey(),
 		// Add other commands here
 	)
 

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -35,10 +36,8 @@ func initConfig(configFile string) error {
 	if err := viper.ReadInConfig(); err != nil {
 		// Print a clear message instead of silently swallowing.
 		fmt.Fprintf(os.Stderr, "[config] using: %s\n", viper.ConfigFileUsed())
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+		if _, ok := errors.AsType[viper.ConfigFileNotFoundError](err); ok {
 			fmt.Fprintf(os.Stderr, "[config] no config file found at searched paths\n")
-		} else {
-			return fmt.Errorf("error reading config file: %w", err)
 		}
 	}
 
