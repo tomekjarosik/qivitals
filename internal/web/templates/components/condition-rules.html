@@ -31,8 +31,14 @@
                 </div>
                 <div class="md:col-span-3">
                     <label class="block text-xs font-medium text-slate-500 mb-1">Target State</label>
-                    <input type="text" name="rule_target_state" value="{{$rule.TargetState}}"
-                           class="w-full rounded-md border border-slate-300 px-2 py-1 text-sm">
+                    <select name="rule_target_state"
+                            class="w-full rounded-md border border-slate-300 px-2 py-1 text-sm bg-white">
+                        {{range $.Sensor.AvailableStates}}
+                        <option value="{{.}}" {{if eq . $rule.TargetState}}selected{{end}}>
+                            {{.}}
+                        </option>
+                        {{end}}
+                    </select>
                 </div>
                 <div class="md:col-span-7">
                     <label class="block text-xs font-medium text-slate-500 mb-1">Message</label>

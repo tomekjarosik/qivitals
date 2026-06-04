@@ -4,9 +4,7 @@
     <div class="flex items-start gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
         <!-- Status pill -->
         <span class="mt-0.5 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide
-            {{if eq .Status "True"}}bg-rose-100 text-rose-700
-        {{else if eq .Status "False"}}bg-emerald-100 text-emerald-700
-        {{else}}bg-slate-200 text-slate-600{{end}}">
+            {{conditionPill .Status}}">
         {{.Status}}
         </span>
 

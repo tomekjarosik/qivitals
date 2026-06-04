@@ -65,6 +65,11 @@ func initTemplates() (*template.Template, error) {
 			}
 			return models.ConditionView{Status: "Unknown"}
 		},
+		"stateBg":         models.StateBackground,
+		"stateDotClass":   models.StateDotClass,
+		"conditionDot":    models.ConditionDotClass,
+		"conditionPill":   models.ConditionPillClass,
+		"availableStates": models.AvailableSensorStates,
 	}
 
 	tmpl, err := template.New("").Funcs(funcs).ParseFS(subFS, "**/*.html")

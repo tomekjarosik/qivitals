@@ -178,19 +178,7 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func sensorToCardView(s *v1.Sensor) models.SensorCardView {
-	bgClass := "bg-slate-50/90" // fallback
-	switch s.Status.State {
-	case v1.SensorState_OK:
-		bgClass = "bg-emerald-50/90"
-	case v1.SensorState_DEGRADED:
-		bgClass = "bg-amber-50/90"
-	case v1.SensorState_FAILED:
-		bgClass = "bg-rose-50/90"
-	case v1.SensorState_PAUSED:
-		bgClass = "bg-blue-50/9"
-	case v1.SensorState_UNKNOWN:
-		bgClass = "bg-zinc-50/90"
-	}
+	bgClass := models.StateBackground(s.Status.State)
 	var rules []models.ConditionRuleView
 
 	for _, r := range s.Spec.Rules {
@@ -229,6 +217,7 @@ func sensorToCardView(s *v1.Sensor) models.SensorCardView {
 		ConditionRules:        rules,
 		Conditions:            conditions,
 		ConditionsByRule:      conditionsByRule,
+		AvailableStates:       models.AvailableSensorStates(),
 	}
 }
 

@@ -7,7 +7,7 @@ import (
 
 // StatusBadgeView holds the data needed to display a status indicator.
 type StatusBadgeView struct {
-	State   string // "OK", "DEGRADED", "DEAD" or anything
+	State   string
 	ShowDot bool
 }
 
@@ -57,6 +57,7 @@ type SensorCardView struct {
 	Conditions            []ConditionView
 	ConditionsByRule      ConditionsByName
 	ConditionRules        []ConditionRuleView
+	AvailableStates       []string
 }
 
 // NamespaceGroupView groups sensors under a namespace.
