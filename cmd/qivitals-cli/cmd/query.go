@@ -2,9 +2,9 @@ package cmd
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	v1 "github.com/tomekjarosik/qivitals/gen/api/qivitals/v1"
 )
 
@@ -37,7 +37,7 @@ Examples:
   # Label filtering
   sensorcli query --label "env:production" --has-label "critical"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runQuery(cmd, args, id, name, namespace, search, statuses, labels, hasLabelKeys)
+			return runQuery(cmd, args, id, name, namespace, search, statuses, labels, hasLabelKeys, viper.GetString("output"))
 		},
 	}
 
@@ -55,7 +55,7 @@ Examples:
 	return cmd
 }
 
-func runQuery(cmd *cobra.Command, _ []string, id, name, namespace, search string, statuses, labelStrings, hasLabelKeys []string) error {
+func runQuery(cmd *cobra.Command, _ []string, id, name, namespace, search string, states, labelStrings, hasLabelKeys []string, outputFormat string) error {
 	client, conn, err := NewQiVitalsClient(cmd.Context())
 	if err != nil {
 		return fmt.Errorf("failed to connect to gRPC server: %w", err)
@@ -67,12 +67,17 @@ func runQuery(cmd *cobra.Command, _ []string, id, name, namespace, search string
 		return fmt.Errorf("failed to parse labels: %w", err)
 	}
 
+	protoStates, err := parseStates(states)
+	if err != nil {
+		return fmt.Errorf("failed to parse states: %w", err)
+	}
+
 	req := &v1.QuerySensorsRequest{
 		Id:           id,
 		Name:         name,
 		Namespace:    namespace,
 		Search:       search,
-		Statuses:     statuses,
+		States:       protoStates,
 		Labels:       parsedLabels,
 		HasLabelKeys: hasLabelKeys,
 	}
@@ -82,69 +87,5 @@ func runQuery(cmd *cobra.Command, _ []string, id, name, namespace, search string
 		return fmt.Errorf("failed to query sensors: %w", err)
 	}
 
-	if emitJsonFromMessage(response) {
-		return nil
-	}
-
-	printQueryResult(len(response.Sensors), response.Sensors)
-
-	return nil
-}
-
-func printQueryResult(count int, sensors []*v1.Sensor) {
-	if count == 0 {
-		fmt.Println("No sensors found.")
-		return
-	}
-
-	fmt.Printf("\nFound %d sensor(s):\n\n", count)
-	fmt.Printf("%-35s%-25s%-12s%-25s\n", "NAMESPACE / NAME", "SENSOR ID", "STATUS", "LAST HEARTBEAT")
-	fmt.Printf("%-35s%-25s%-12s%-25s\n", "----------------", "---------", "------", "--------------")
-	for _, s := range sensors {
-		state := "UNKNOWN"
-		var lastUpdated int64
-
-		if s.Status != nil {
-			state = s.Status.State
-			lastUpdated = s.Status.LastReportedTimestamp
-		}
-
-		// Create a nice human-readable name string: namespace/name
-		displayName := s.Metadata.Name
-		if s.Metadata.Namespace != "" && s.Metadata.Namespace != "default" {
-			displayName = s.Metadata.Namespace + "/" + s.Metadata.Name
-		}
-
-		// Truncate UUID for cleaner table view (first 8 chars)
-		shortID := s.Metadata.Id
-		if len(shortID) > 8 {
-			shortID = shortID[:8]
-		}
-
-		// Truncate display name if it's too long for the column
-		if len(displayName) > 33 {
-			displayName = displayName[:30] + "..."
-		}
-
-		fmt.Printf("%-35s%-25s%-12s%-25s\n",
-			displayName,
-			shortID,
-			state,
-			timeString(lastUpdated))
-	}
-	fmt.Println()
-}
-
-func timeString(ts int64) string {
-	if ts == 0 {
-		return "never"
-	}
-	return ageString(ts) + " ago"
-}
-
-func ageString(ts int64) string {
-	if ts == 0 {
-		return "never"
-	}
-	return time.Since(time.Unix(ts, 0)).Round(time.Second).String()
+	return EmitOutput(outputFormat, response)
 }

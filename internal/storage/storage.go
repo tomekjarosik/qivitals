@@ -47,7 +47,7 @@ type QueryFilter struct {
 	Search       string            // Matches substring in Name or Description
 	Labels       map[string]string // Exact matches (AND logic)
 	HasLabelKeys []string          // Key existence (AND logic)
-	Statuses     []string          // IN clause for computed statuses
+	States       []string          // IN clause for computed states
 
 	OrderBy   string
 	OrderDesc bool

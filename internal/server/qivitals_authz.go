@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"slices"
 
 	v1 "github.com/tomekjarosik/qivitals/gen/api/qivitals/v1"
 	"github.com/tomekjarosik/qivitals/internal/auth"
@@ -53,11 +54,19 @@ func (m *ServiceAuthMiddleware) RegisterSensor(ctx context.Context, req *v1.Regi
 	return m.inner.RegisterSensor(ctx, req)
 }
 
-// ReportSensor no namespace check needed in new auth model ---
-// (Sensors are no longer a token type; report requests use their own auth)
 func (m *ServiceAuthMiddleware) ReportSensor(ctx context.Context, req *v1.ReportSensorRequest) (*v1.ReportSensorResponse, error) {
-	// TODO: Check the namespace
-	return m.inner.ReportSensor(ctx, req)
+	entity := auth.EntityFromContext(ctx)
+	if entity == nil {
+		return &v1.ReportSensorResponse{}, status.Error(codes.Unauthenticated, "no user found")
+	}
+	sensor, err := m.store.GetSensor(ctx, req.Id)
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "sensor %s not found", req.Id)
+	}
+	if slices.Contains(entity.Namespaces(), sensor.Metadata.Namespace) {
+		return m.inner.ReportSensor(ctx, req)
+	}
+	return &v1.ReportSensorResponse{}, status.Errorf(codes.PermissionDenied, "can't report data in namespace '%s'", sensor.Metadata.Namespace)
 }
 
 // DeleteSensor look up target's namespace via NamespaceResolver, then check user access ---

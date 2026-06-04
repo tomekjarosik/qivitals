@@ -1,15 +1,23 @@
 package cmd
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"math"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/spf13/cobra"
 	v1 "github.com/tomekjarosik/qivitals/gen/api/qivitals/v1"
+	"google.golang.org/protobuf/encoding/protojson"
+	"gopkg.in/yaml.v3"
 )
 
 func NewCmdUpdate() *cobra.Command {
@@ -29,6 +37,8 @@ func NewCmdUpdate() *cobra.Command {
 		addCondition     []string // format: "name:expression:target_state:message_template"
 		removeCondition  []string // index (0, 1, 2, ...) or "all"
 		replaceCondition []string // format: "index:name:expression:target_state:message_template"
+
+		patchFile string
 	)
 
 	cmd := &cobra.Command{
@@ -54,6 +64,9 @@ Examples:
   # Remove a condition by index
   qivitals-cli update --id 550e8400-e29b --remove-condition 0`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if patchFile != "" {
+				return runUpdateFromFile(cmd, patchFile)
+			}
 			if sensorID == "" && sensorName == "" {
 				return fmt.Errorf("must provide either --id or --name to identify the sensor to update")
 			}
@@ -84,6 +97,9 @@ Examples:
 	cmd.Flags().StringArrayVar(&addCondition, "add-condition", []string{}, "Add a condition rule (format: 'name:expression:target_state:message_template')")
 	cmd.Flags().StringArrayVar(&removeCondition, "remove-condition", []string{}, "Remove a condition rule by index (e.g., '0', '1', or 'all')")
 	cmd.Flags().StringArrayVar(&replaceCondition, "replace-condition", []string{}, "Replace a condition rule by index (format: 'index:name:expression:target_state:message_template')")
+
+	// TODO: deal with duplicated "-f" flag
+	//cmd.Flags().StringVarP(&patchFile, "file", "f", "", "Filename to inspect for a sensor configuration patch")
 
 	return cmd
 }
@@ -271,4 +287,150 @@ func calculatePatchConditions(sensor *v1.Sensor, addRules, removeRules, replaceR
 	}
 
 	return patches, nil
+}
+
+func runUpdateFromFile(cmd *cobra.Command, patchFile string) error {
+	data, err := os.ReadFile(patchFile)
+	if err != nil {
+		return fmt.Errorf("failed to read patch file: %w", err)
+	}
+
+	client, conn, err := NewQiVitalsClient(cmd.Context())
+	if err != nil {
+		return fmt.Errorf("failed to connect to gRPC server: %w", err)
+	}
+	defer conn.Close()
+
+	// Create a decoder to handle multi-document YAML (separated by ---)
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	var successCount int
+	var errs []error
+
+	for {
+		var yamlMap map[string]interface{}
+		err := decoder.Decode(&yamlMap)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break // Reached end of file
+			}
+			return fmt.Errorf("failed to parse YAML document: %w", err)
+		}
+
+		// Skip empty documents (e.g., trailing '---' or empty files)
+		if len(yamlMap) == 0 {
+			continue
+		}
+
+		// Process each document individually
+		err = applyPatchFromMap(cmd.Context(), client, yamlMap)
+		if err != nil {
+			// Collecting errors is more K8s-like.
+			errs = append(errs, err)
+			continue
+		}
+		successCount++
+	}
+
+	if len(errs) > 0 {
+		// Print a summary if some failed but others succeeded
+		return fmt.Errorf("applied %d patches, but encountered %d errors. First error: %w", successCount, len(errs), errs[0])
+	}
+
+	fmt.Printf("Successfully applied %d sensor patches from file.\n", successCount)
+	return nil
+}
+
+// applyPatchFromMap handles the diffing and gRPC request for a single YAML document
+func applyPatchFromMap(ctx context.Context, client v1.QiVitalsServiceClient, yamlMap map[string]interface{}) error {
+	fileJsonBytes, err := json.Marshal(yamlMap)
+	if err != nil {
+		return fmt.Errorf("failed to convert YAML to JSON: %w", err)
+	}
+
+	// Partially unmarshal to extract Identity (Id or Namespace/Name)
+	var fileSensor v1.Sensor
+	unmarshalOpts := protojson.UnmarshalOptions{DiscardUnknown: true}
+	if err := unmarshalOpts.Unmarshal(fileJsonBytes, &fileSensor); err != nil {
+		return fmt.Errorf("invalid sensor schema: %w", err)
+	}
+
+	queryReq := &v1.QuerySensorsRequest{}
+	if fileSensor.Metadata != nil && fileSensor.Metadata.Id != "" {
+		queryReq.Id = fileSensor.Metadata.Id
+	} else if fileSensor.Metadata != nil && fileSensor.Metadata.Name != "" {
+		queryReq.Namespace = fileSensor.Metadata.Namespace
+		if queryReq.Namespace == "" {
+			queryReq.Namespace = "default" // default namespace fallback
+		}
+		queryReq.Name = fileSensor.Metadata.Name
+	} else {
+		return fmt.Errorf("document must specify metadata.id OR metadata.name")
+	}
+
+	// Fetch current state
+	queryResp, err := client.QuerySensors(ctx, queryReq)
+	if err != nil || len(queryResp.Sensors) == 0 {
+		return fmt.Errorf("sensor '%s/%s' (id: %s) not found on server", queryReq.Namespace, queryReq.Name, queryReq.Id)
+	}
+	currentSensor := queryResp.Sensors[0]
+
+	// Compute Target State
+	marshalOpts := protojson.MarshalOptions{UseProtoNames: true}
+	currentJsonBytes, err := marshalOpts.Marshal(currentSensor)
+	if err != nil {
+		return fmt.Errorf("failed to marshal current sensor: %w", err)
+	}
+
+	targetJsonBytes, err := jsonpatch.MergePatch(currentJsonBytes, fileJsonBytes)
+	if err != nil {
+		return fmt.Errorf("failed to merge document configuration: %w", err)
+	}
+
+	// Compute Diff
+	patchBytes, err := jsonpatch.CreateMergePatch(currentJsonBytes, targetJsonBytes)
+	if err != nil {
+		return fmt.Errorf("failed to generate diff patch: %w", err)
+	}
+
+	var externalOps []struct {
+		Op    string          `json:"op"`
+		Path  string          `json:"path"`
+		Value json.RawMessage `json:"value,omitempty"`
+	}
+	if err := json.Unmarshal(patchBytes, &externalOps); err != nil {
+		return fmt.Errorf("failed to parse computed patch: %w", err)
+	}
+
+	// Filter and convert ops
+	var patches []*v1.PatchOperation
+	for _, op := range externalOps {
+		if strings.HasPrefix(op.Path, "/status") {
+			continue // Prevent modifying read-only status fields
+		}
+		patches = append(patches, &v1.PatchOperation{
+			Op:    op.Op,
+			Path:  op.Path,
+			Value: string(op.Value),
+		})
+	}
+
+	if len(patches) == 0 {
+		fmt.Printf("Sensor %s/%s: unchanged\n", currentSensor.Metadata.Namespace, currentSensor.Metadata.Name)
+		return nil
+	}
+
+	// Send Patch
+	req := &v1.PatchSensorRequest{
+		Id:         currentSensor.Metadata.Id,
+		Version:    currentSensor.Metadata.ResourceVersion,
+		Operations: patches,
+	}
+
+	_, err = client.PatchSensor(ctx, req)
+	if err != nil {
+		return fmt.Errorf("failed to patch sensor %s/%s: %w", currentSensor.Metadata.Namespace, currentSensor.Metadata.Name, err)
+	}
+
+	fmt.Printf("Sensor %s/%s: patched\n", currentSensor.Metadata.Namespace, currentSensor.Metadata.Name)
+	return nil
 }

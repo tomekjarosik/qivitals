@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	v1 "github.com/tomekjarosik/qivitals/gen/api/qivitals/v1"
 )
 
@@ -50,7 +51,6 @@ func runStatus(cmd *cobra.Command, _ []string, sensorID, sensorName, namespace s
 		Namespace: namespace,
 	}
 
-	// Execute the gRPC call
 	response, err := client.QuerySensors(cmd.Context(), req)
 	if err != nil {
 		return fmt.Errorf("failed to query sensor: %w", err)
@@ -63,8 +63,8 @@ func runStatus(cmd *cobra.Command, _ []string, sensorID, sensorName, namespace s
 	s := response.Sensors[0]
 
 	// Support machine-readable output if requested globally
-	if emitJsonFromMessage(s) {
-		return nil
+	if viper.GetString("output") != "text" {
+		return EmitOutput(viper.GetString("output"), response)
 	}
 
 	fmt.Printf("\n--- Sensor Details ---\n")

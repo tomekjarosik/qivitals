@@ -1,10 +1,11 @@
 # TODOs
 
 Small:
-- implement magic link approach to current authorization
-  - add "web_authorization_key" to the config to sign logins
-  - 
-
+[ ] - add version like in Geranos
+[ ] - make sure that "not reporting data" has highest priority (over conditions)
+[ ] - kubernetes-like patching based on a file (rename 'update' to 'patch')
+[ ] - To achieve the ultimate Kubernetes-like experience (similar to kubectl get sensors -o yaml > patch.yaml),
+you should replace your boolean --machine flag with an --output (or -o) string flag that supports json and yaml.
 
 Long term:
 [ ] - implement system labels (e.g. owner.sys.qivitals, silenced.sys.qivitals)

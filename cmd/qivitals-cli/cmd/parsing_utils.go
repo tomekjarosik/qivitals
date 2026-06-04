@@ -91,3 +91,21 @@ func parseConditionRules(rules []string) ([]*v1.ConditionRule, error) {
 	}
 	return result, nil
 }
+
+func parseStates(states []string) ([]v1.SensorState, error) {
+	if len(states) == 0 {
+		return nil, nil
+	}
+
+	result := make([]v1.SensorState, 0, len(states))
+	for _, s := range states {
+		key := strings.ToUpper(strings.TrimSpace(s))
+		val, ok := v1.SensorState_value[key]
+		if !ok {
+			return nil, fmt.Errorf("unknown sensor state %q", s)
+		}
+		result = append(result, v1.SensorState(val))
+	}
+
+	return result, nil
+}

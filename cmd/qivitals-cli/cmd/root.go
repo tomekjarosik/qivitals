@@ -42,7 +42,7 @@ func InitializeCommands() *cobra.Command {
 	var configFile string // will hold the value of --config
 	var verbose bool      // used for binding, but viper reads later
 	var baseURL string
-	var machineOutput bool
+	var outputType string
 	var dryRun bool
 
 	rootCmd := &cobra.Command{
@@ -76,9 +76,9 @@ Register sensors, send health check signals, and query sensor statuses all from 
 	rootCmd.PersistentFlags().StringVar(&baseURL, "url", "localhost:50051", "QiVitals service gRPC endpoint (host:port)")
 	viper.BindPFlag("cli.url", rootCmd.PersistentFlags().Lookup("url"))
 
-	// Define the --machine global flag for JSON output
-	rootCmd.PersistentFlags().BoolVarP(&machineOutput, "machine", "m", false, "output response in machine-readable JSON format")
-	viper.BindPFlag("machine", rootCmd.PersistentFlags().Lookup("machine"))
+	// Define the --output global flag
+	rootCmd.PersistentFlags().StringVarP(&outputType, "output", "o", "", "output response text, json or yaml formats")
+	viper.BindPFlag("output", rootCmd.PersistentFlags().Lookup("output"))
 
 	rootCmd.PersistentFlags().BoolVarP(&dryRun, "dry-run", "d", false, "Collect data without sending to server")
 	viper.BindPFlag("dry-run", rootCmd.PersistentFlags().Lookup("dry-run"))

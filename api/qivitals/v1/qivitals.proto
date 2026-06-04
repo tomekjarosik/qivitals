@@ -29,7 +29,7 @@ message ConditionRule {
   string expression = 2;
 
   // The state to apply if this expression evaluates to true.
-  // Examples: "DEGRADED", "DEAD", or custom states like "WARNING"
+  // Examples: "PAUSED", "FAILED", "OK" etc.
   string target_state = 3;
 
   // Human-readable message template (optional).
@@ -66,9 +66,28 @@ message SensorSpec {
   repeated ConditionRule rules = 3;
 }
 
+// SensorState represents the high-level computed health of a sensor.
+enum SensorState {
+  // 0 is the default value in proto3. Perfect for when a sensor is registered
+  // but hasn't reported any data yet.
+  UNKNOWN = 0;
+
+  // The sensor is healthy and reporting within normal parameters.
+  OK = 1;
+
+  // The sensor is taking longer than the graceful period or a non-critical rule matched.
+  DEGRADED = 2;
+
+  // The sensor has explicitly failed, or has exceeded the failure period timeout.
+  FAILED = 3;
+
+  // The sensor monitoring is intentionally suspended by the user.
+  PAUSED = 4;
+}
+
 // SensorStatus contains ONLY the observed runtime state.
 message SensorStatus {
-  string state = 1;             // Computed state: "OK", "DEGRADED", "DEAD"
+  SensorState state = 1;             // Computed state
   int64 last_reported_timestamp = 2;    // Unix timestamp of last heartbeat/data report
   // Detailed breakdown of the sensor's health evaluations
   repeated Condition conditions = 3;
@@ -143,7 +162,7 @@ message QuerySensorsRequest {
 
   map<string, string> labels = 5;
   repeated string has_label_keys = 6;
-  repeated string statuses = 7;
+  repeated SensorState states = 7;
 
   int32 page_size = 8;
   string page_token = 9;

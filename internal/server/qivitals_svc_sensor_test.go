@@ -156,13 +156,13 @@ func TestQuerySensors(t *testing.T) {
 
 	assert.Greater(t, len(queryResp.Sensors), 0)
 	for _, sensor := range queryResp.Sensors {
-		assert.Equal(t, "OK", sensor.Status.State)
+		assert.Equal(t, v1.SensorState_OK, sensor.Status.State)
 		assert.NotZero(t, sensor.Status.LastReportedTimestamp)
 	}
 
 	// Query all ACTIVE sensors (status filter)
 	queryReqActive := &v1.QuerySensorsRequest{
-		Statuses: []string{"OK"},
+		States: []v1.SensorState{v1.SensorState_OK},
 	}
 	queryRespActive, err := impl.QuerySensors(context.Background(), queryReqActive)
 	assert.NoError(t, err)
@@ -170,7 +170,7 @@ func TestQuerySensors(t *testing.T) {
 	if len(queryResp.Sensors) > 0 {
 		assert.GreaterOrEqual(t, len(queryRespActive.Sensors), 1)
 		for _, sensor := range queryRespActive.Sensors {
-			assert.Equal(t, "OK", sensor.Status.State)
+			assert.Equal(t, v1.SensorState_OK, sensor.Status.State)
 		}
 	}
 }
@@ -288,7 +288,7 @@ func TestQuerySensors_ByLabels(t *testing.T) {
 	for _, sensor := range queryResp.Sensors {
 		if sensor.Metadata.Id == "sensor-1" {
 			filteredCount++
-			assert.Equal(t, "OK", sensor.Status.State)
+			assert.Equal(t, v1.SensorState_OK, sensor.Status.State)
 		}
 	}
 	assert.Greater(t, filteredCount, 0)
@@ -318,42 +318,42 @@ func TestStatusCalculation(t *testing.T) {
 		age            int64
 		gracefulPeriod int64
 		failurePeriod  int64
-		expectedStatus string
+		expectedStatus v1.SensorState
 	}{
 		{
 			name:           "Active - recent OK",
 			age:            0,
 			gracefulPeriod: 60,
 			failurePeriod:  120,
-			expectedStatus: "OK",
+			expectedStatus: v1.SensorState_OK,
 		},
 		{
 			name:           "Active - within graceful period",
 			age:            30,
 			gracefulPeriod: 60,
 			failurePeriod:  120,
-			expectedStatus: "OK",
+			expectedStatus: v1.SensorState_OK,
 		},
 		{
 			name:           "Degraded - within graceful period",
 			age:            60,
 			gracefulPeriod: 60,
 			failurePeriod:  120,
-			expectedStatus: "DEGRADED",
+			expectedStatus: v1.SensorState_DEGRADED,
 		},
 		{
 			name:           "Degraded - within failure period",
 			age:            90,
 			gracefulPeriod: 60,
 			failurePeriod:  120,
-			expectedStatus: "DEGRADED",
+			expectedStatus: v1.SensorState_DEGRADED,
 		},
 		{
 			name:           "Dead - expired graceful period",
 			age:            150,
 			gracefulPeriod: 60,
 			failurePeriod:  120,
-			expectedStatus: "DEAD",
+			expectedStatus: v1.SensorState_FAILED,
 		},
 	}
 

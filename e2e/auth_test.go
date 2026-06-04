@@ -111,5 +111,5 @@ func TestWorkflow_SensorStateUnauthorized(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.Sensors, 1)
 
-	assert.Equal(t, "OK", resp.Sensors[0].Status.State)
+	assert.Equal(t, "OK", resp.Sensors[0].Status.State.String())
 }

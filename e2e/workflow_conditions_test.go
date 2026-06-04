@@ -253,18 +253,18 @@ func TestWorkflow_Conditions_TargetStateOverridesState(t *testing.T) {
 
 	// Long grace period so the time-based state is always OK.
 	sensorID := registerSensor(t, "infra", "state-override", "Test state override", "10h", "20h")
-	addCondition(t, sensorID, "Critical:double(reported_data[\"err_count\"]) > 0.0:DEAD:Errors found")
+	addCondition(t, sensorID, "Critical:double(reported_data[\"err_count\"]) > 0.0:FAILED:Errors found")
 
 	// Healthy reporting → state stays OK
 	reportData(t, sensorID, "err_count=0")
 	sensor := queryByID(t, sensorID)
-	assert.Equal(t, "OK", sensor.Status.State, "no errors → OK")
+	assert.Equal(t, "OK", sensor.Status.State.String(), "no errors → OK")
 	assertConditionStatus(t, sensor, "Critical", "False")
 
-	// Trigger condition → state should escalate to DEAD
+	// Trigger condition → state should escalate to FAILED
 	reportData(t, sensorID, "err_count=5")
 	sensor = queryByID(t, sensorID)
-	assert.Equal(t, "DEAD", sensor.Status.State, "errors → DEAD (overridden by condition target_state)")
+	assert.Equal(t, "FAILED", sensor.Status.State.String(), "errors → DEAD (overridden by condition target_state)")
 	assertConditionStatus(t, sensor, "Critical", "True")
 }
 

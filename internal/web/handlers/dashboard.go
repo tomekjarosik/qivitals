@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"fmt"
 	"log"
 	"net/http"
 	"sort"
@@ -31,6 +32,24 @@ func NewDashboardHandler(renderer web.Renderer, client v1.QiVitalsServiceClient,
 	}
 }
 
+func parseStates(states []string) ([]v1.SensorState, error) {
+	if len(states) == 0 {
+		return nil, nil
+	}
+
+	result := make([]v1.SensorState, 0, len(states))
+	for _, s := range states {
+		key := strings.ToUpper(strings.TrimSpace(s))
+		val, ok := v1.SensorState_value[key]
+		if !ok {
+			return nil, fmt.Errorf("unknown sensor state %q", s)
+		}
+		result = append(result, v1.SensorState(val))
+	}
+
+	return result, nil
+}
+
 func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	statuses := q["statuses"]
@@ -54,11 +73,16 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	orderDesc, _ := strconv.ParseBool(q.Get("order_desc"))
 
+	// TODO: review this
+	protoStates, err := parseStates(statuses)
+	if err != nil {
+		protoStates = nil
+	}
 	req := &v1.QuerySensorsRequest{
 		Namespace:    q.Get("namespace"),
 		Name:         q.Get("name"),
 		Search:       q.Get("search"),
-		Statuses:     statuses,
+		States:       protoStates,
 		Labels:       toMap(labels),
 		HasLabelKeys: hasLabelKeys,
 		OrderBy:      q.Get("order_by"),
@@ -156,12 +180,16 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func sensorToCardView(s *v1.Sensor) models.SensorCardView {
 	bgClass := "bg-slate-50/90" // fallback
 	switch s.Status.State {
-	case "OK":
+	case v1.SensorState_OK:
 		bgClass = "bg-emerald-50/90"
-	case "DEGRADED":
+	case v1.SensorState_DEGRADED:
 		bgClass = "bg-amber-50/90"
-	case "DEAD":
+	case v1.SensorState_FAILED:
 		bgClass = "bg-rose-50/90"
+	case v1.SensorState_PAUSED:
+		bgClass = "bg-blue-50/9"
+	case v1.SensorState_UNKNOWN:
+		bgClass = "bg-zinc-50/90"
 	}
 	var rules []models.ConditionRuleView
 
@@ -190,7 +218,7 @@ func sensorToCardView(s *v1.Sensor) models.SensorCardView {
 		ID:                    s.Metadata.Id,
 		Name:                  s.Metadata.Name,
 		Description:           s.Metadata.Description,
-		Status:                models.StatusBadgeView{State: s.Status.State, ShowDot: true},
+		Status:                models.StatusBadgeView{State: s.Status.State.String(), ShowDot: true},
 		BackgroundClass:       bgClass,
 		Labels:                models.LabelPillsView{Labels: s.Metadata.Labels},
 		GracefulPeriodSeconds: s.Spec.GracefulPeriodSeconds,

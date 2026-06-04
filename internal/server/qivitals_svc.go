@@ -114,6 +114,19 @@ func (s *QiVitalsService) DeleteSensor(ctx context.Context, req *v1.DeleteSensor
 	return &v1.DeleteSensorResponse{}, nil
 }
 
+func sensorStatesToStrings(states []v1.SensorState) []string {
+	if len(states) == 0 {
+		return nil
+	}
+
+	result := make([]string, len(states))
+	for i, s := range states {
+		result[i] = v1.SensorState_name[int32(s)]
+	}
+
+	return result
+}
+
 func (s *QiVitalsService) QuerySensors(ctx context.Context, req *v1.QuerySensorsRequest) (*v1.QuerySensorsResponse, error) {
 	filter := storage.QueryFilter{
 		ID:           req.Id,
@@ -122,7 +135,7 @@ func (s *QiVitalsService) QuerySensors(ctx context.Context, req *v1.QuerySensors
 		Search:       req.Search,
 		Labels:       req.Labels, // Maps directly!
 		HasLabelKeys: req.HasLabelKeys,
-		Statuses:     req.Statuses,
+		States:       sensorStatesToStrings(req.States),
 		OrderBy:      req.OrderBy,
 		OrderDesc:    req.OrderDesc,
 		Limit:        int(req.PageSize),
@@ -139,9 +152,9 @@ func (s *QiVitalsService) QuerySensors(ctx context.Context, req *v1.QuerySensors
 		protoSensor := buildProtoSensor(state, conditions)
 
 		// Filter computed status if requested
-		if len(req.Statuses) > 0 {
+		if len(req.States) > 0 {
 			statusMatch := false
-			for _, allowedStatus := range req.Statuses {
+			for _, allowedStatus := range req.States {
 				if protoSensor.Status.State == allowedStatus {
 					statusMatch = true
 					break
@@ -171,7 +184,11 @@ func buildProtoSensor(state *storage.SensorState, conditions []*v1.Condition) *v
 				for _, rule := range state.Info.ConditionRules {
 					if rule.Name == cond.Type {
 						if rule.TargetState != "" {
-							computedState = rule.TargetState
+							if stateVal, ok := v1.SensorState_value[rule.TargetState]; ok {
+								computedState = v1.SensorState(stateVal)
+							} else {
+								// TODO: handle unknown state
+							}
 						}
 						break
 					}
@@ -213,17 +230,17 @@ func (s *QiVitalsService) GetSensor(ctx context.Context, id string) (*v1.Sensor,
 	return buildProtoSensor(state, conditions), nil
 }
 
-func calculateSensorStatus(state *storage.SensorState) string {
+func calculateSensorStatus(state *storage.SensorState) v1.SensorState {
 	now := time.Now().Unix()
 	age := now - state.LastReportedAt
 
 	if age < state.Info.GracefulPeriod {
-		return "OK"
+		return v1.SensorState_OK
 	}
 
 	if age < state.Info.FailurePeriod {
-		return "DEGRADED"
+		return v1.SensorState_DEGRADED
 	}
 
-	return "DEAD"
+	return v1.SensorState_FAILED
 }

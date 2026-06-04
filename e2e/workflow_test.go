@@ -34,7 +34,7 @@ func TestWorkflow_MonthlyBills(t *testing.T) {
 
 	sn := resp.Sensors[0]
 
-	assert.Equal(t, "OK", sn.Status.State)
+	assert.Equal(t, "OK", sn.Status.State.String())
 	assert.Equal(t, "45.50", sn.Status.ReportedData["paid_amount"])
 	assert.Equal(t, "bank_transfer", sn.Status.ReportedData["method"])
 	assert.Equal(t, "Monthly water utility bill", sn.Metadata.Description)
@@ -76,7 +76,7 @@ func TestWorkflow_ITInfrastructure(t *testing.T) {
 	// Verify TLS Sensor
 	tlsSensor := findSensorByID(resp.Sensors, tlsID)
 	require.NotNil(t, tlsSensor)
-	assert.Equal(t, "OK", tlsSensor.Status.State)
+	assert.Equal(t, "OK", tlsSensor.Status.State.String())
 	assert.Equal(t, "65", tlsSensor.Status.ReportedData["days_remaining"])
 	assert.Equal(t, "infra", tlsSensor.Metadata.Namespace)
 	assert.Equal(t, "tls-jarosik-online", tlsSensor.Metadata.Name)
@@ -84,14 +84,14 @@ func TestWorkflow_ITInfrastructure(t *testing.T) {
 	// Verify Backup Sensor
 	backupSensor := findSensorByID(resp.Sensors, backupID)
 	require.NotNil(t, backupSensor)
-	assert.Equal(t, "OK", backupSensor.Status.State)
+	assert.Equal(t, "OK", backupSensor.Status.State.String())
 	assert.Equal(t, "14.2", backupSensor.Status.ReportedData["size_gb"])
 	assert.Equal(t, "450", backupSensor.Status.ReportedData["duration_sec"])
 
 	// Verify Ping Sensor
 	vmPingSensor := findSensorByID(resp.Sensors, vmPingID)
 	require.NotNil(t, vmPingSensor)
-	assert.Equal(t, "OK", vmPingSensor.Status.State)
+	assert.Equal(t, "OK", vmPingSensor.Status.State.String())
 	assert.Equal(t, "4", vmPingSensor.Status.ReportedData["latency_ms"])
 }
 
@@ -114,7 +114,7 @@ func TestWorkflow_HomeNetwork(t *testing.T) {
 	require.Len(t, resp.Sensors, 1)
 
 	sn := resp.Sensors[0]
-	assert.Equal(t, "OK", sn.Status.State)
+	assert.Equal(t, "OK", sn.Status.State.String())
 	assert.Equal(t, "0%", sn.Status.ReportedData["packet_loss"])
 	assert.Equal(t, "network", sn.Metadata.Namespace)
 	assert.Equal(t, "isp-connection", sn.Metadata.Name)
@@ -147,12 +147,12 @@ func TestWorkflow_FamilyChores(t *testing.T) {
 
 	dogSensor := findSensorByID(resp.Sensors, dogID)
 	require.NotNil(t, dogSensor)
-	assert.Equal(t, "OK", dogSensor.Status.State)
+	assert.Equal(t, "OK", dogSensor.Status.State.String())
 	assert.Equal(t, "timmy", dogSensor.Status.ReportedData["feeder"])
 
 	plantsSensor := findSensorByID(resp.Sensors, plantsID)
 	require.NotNil(t, plantsSensor)
-	assert.Equal(t, "OK", plantsSensor.Status.State)
+	assert.Equal(t, "OK", plantsSensor.Status.State.String())
 }
 
 func TestWorkflow_TemporaryProject(t *testing.T) {

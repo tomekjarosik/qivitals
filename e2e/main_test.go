@@ -237,7 +237,7 @@ func runCLIwithErr(t *testing.T, command string) (string, string) {
 		t.Fatalf("Failed to split command string: %v", err)
 	}
 
-	args = append(args, "--config", configPath, "--machine")
+	args = append(args, "--config", configPath, "--output", "json")
 	cmd := exec.Command(cliBin, args...)
 
 	var outBuf, errBuf bytes.Buffer
