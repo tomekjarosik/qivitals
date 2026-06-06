@@ -19,6 +19,8 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+var SessionCookieDuration = 30 * 24 * time.Hour
+
 // SSHKey holds the parsed crypto key and its fingerprint for quick lookup
 type SSHKey struct {
 	Fingerprint string           // Used as JWT "kid" (Key ID)
@@ -275,7 +277,7 @@ func (a *Authenticator) IssueSessionToken(email string) (string, error) {
 			Issuer:    "webui-session",
 			Subject:   email,
 			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(24 * time.Hour)), // 24 hour session
+			ExpiresAt: jwt.NewNumericDate(now.Add(SessionCookieDuration)),
 		},
 		Email: email,
 	}
