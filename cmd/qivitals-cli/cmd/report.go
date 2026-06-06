@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	v1 "github.com/tomekjarosik/qivitals/gen/api/qivitals/v1"
-	"github.com/tomekjarosik/qivitals/internal/sensors"
+	"github.com/tomekjarosik/qivitals/pkg/sensors"
 )
 
 func NewCmdReport() *cobra.Command {

@@ -124,8 +124,7 @@ func (p *PostgresSensorStorage) Patch(ctx context.Context, sensorID string, expe
 		}
 	}
 
-	// We use a raw expression to increment a version counter or rotate a UUID
-	builder = builder.Set("resource_version", squirrel.Expr("resource_version || '_' || substring(md5(random()::text), 1, 8)"))
+	builder = builder.Set("resource_version", squirrel.Expr("gen_random_uuid()::text"))
 
 	// Track when spec/metadata changes happen
 	builder = builder.Set("last_spec_updated", squirrel.Expr("GREATEST(last_spec_updated, extract(epoch from now())::bigint)"))
