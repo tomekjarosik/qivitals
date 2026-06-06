@@ -65,18 +65,18 @@ func RunStorageContractTests(t *testing.T, setup func() SensorStorage, teardown 
 			{
 				Name:            "LowBattery",
 				Expression:      `double(reported_data['battery_level']) < 15.0`,
-				TargetState:     string(StatusDegraded),
+				TargetState:     "DEGRADED",
 				MessageTemplate: "Battery at {{ .reported_data.battery_level }}%",
 			},
 			{
 				Name:        "HighLatency",
 				Expression:  `int(reported_data['latency_ms']) > 500`,
-				TargetState: string(StatusDegraded),
+				TargetState: "DEGRADED",
 			},
 			{
 				Name:        "ProdEnv",
 				Expression:  `labels['environment'] == 'production'`,
-				TargetState: string(StatusActive),
+				TargetState: "DEGRADED",
 			},
 		}
 
@@ -172,7 +172,7 @@ func RunStorageContractTests(t *testing.T, setup func() SensorStorage, teardown 
 		ctx := context.Background()
 
 		conditions := []*v1.ConditionRule{
-			{Name: "Rule1", Expression: `true`, TargetState: string(StatusDegraded)},
+			{Name: "Rule1", Expression: `true`, TargetState: "DEGRADED"},
 		}
 
 		sensor := &SensorInfo{
@@ -529,4 +529,69 @@ func RunExtendedStorageContractTests(t *testing.T, setup func() SensorStorage, t
 	//		}
 	//	}
 	//})
+}
+
+// RunIdentityContractTests validates the lightweight identity lookup methods
+// used by the authorization middleware.
+func RunIdentityContractTests(t *testing.T, setup func() SensorStorage, teardown func()) {
+
+	t.Run("GetIdentity", func(t *testing.T) {
+		storage := setup()
+		defer teardown()
+		ctx := context.Background()
+
+		sensor := &SensorInfo{
+			ID:             "ident-1",
+			Namespace:      "default",
+			Name:           "auth-test-sensor",
+			Description:    "Used for identity lookup tests",
+			GracefulPeriod: 100,
+			FailurePeriod:  200,
+			Labels:         map[string]string{"env": "test"},
+		}
+		err := storage.Register(ctx, sensor)
+		require.NoError(t, err, "Failed to register sensor for identity test")
+
+		// Success: Lookup by ID
+		identity, err := storage.GetIdentity(ctx, "ident-1")
+		require.NoError(t, err)
+		assert.Equal(t, "ident-1", identity.ID)
+		assert.Equal(t, "default", identity.Namespace)
+		assert.Equal(t, "auth-test-sensor", identity.Name)
+
+		// Edge case: Non-existent ID
+		_, err = storage.GetIdentity(ctx, "does-not-exist")
+		assert.ErrorIs(t, err, ErrSensorNotFound, "GetIdentity should return ErrSensorNotFound for missing ID")
+	})
+
+	t.Run("FindIdentity", func(t *testing.T) {
+		storage := setup()
+		defer teardown()
+		ctx := context.Background()
+
+		sensor := &SensorInfo{
+			ID:             "ident-2",
+			Namespace:      "prod",
+			Name:           "db-primary",
+			GracefulPeriod: 100,
+			FailurePeriod:  200,
+		}
+		err := storage.Register(ctx, sensor)
+		require.NoError(t, err, "Failed to register sensor for natural key test")
+
+		// Success: Lookup by Namespace + Name
+		identity, err := storage.FindIdentity(ctx, "prod", "db-primary")
+		require.NoError(t, err)
+		assert.Equal(t, "ident-2", identity.ID, "FindIdentity should return the correct underlying ID")
+		assert.Equal(t, "prod", identity.Namespace)
+		assert.Equal(t, "db-primary", identity.Name)
+
+		// Edge case: Correct Namespace, Wrong Name
+		_, err = storage.FindIdentity(ctx, "prod", "wrong-name")
+		assert.ErrorIs(t, err, ErrSensorNotFound, "FindIdentity should fail when name doesn't match")
+
+		// Edge case: Correct Name, Wrong Namespace
+		_, err = storage.FindIdentity(ctx, "wrong-ns", "db-primary")
+		assert.ErrorIs(t, err, ErrSensorNotFound, "FindIdentity should fail when namespace doesn't match")
+	})
 }

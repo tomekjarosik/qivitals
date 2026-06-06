@@ -22,7 +22,7 @@ func TestIntegration_EndToEndFlow(t *testing.T) {
 
 	// 2. Start the gRPC server with our service implementation
 	grpcServer := grpc.NewServer()
-	impl := NewStatusMonitorService(storage.NewMemorySensorStorage())
+	impl := NewQiVitalsService(storage.NewMemorySensorStorage())
 	v1.RegisterQiVitalsServiceServer(grpcServer, impl)
 
 	go func() {

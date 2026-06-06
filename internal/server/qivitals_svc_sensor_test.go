@@ -15,7 +15,7 @@ import (
 
 func TestRegisterSensor_New(t *testing.T) {
 	strg := storage.NewMemorySensorStorage()
-	impl := NewStatusMonitorService(strg)
+	impl := NewQiVitalsService(strg)
 
 	sensor := &v1.Sensor{
 		Metadata: &v1.ObjectMeta{
@@ -43,7 +43,7 @@ func TestRegisterSensor_New(t *testing.T) {
 
 func TestRegisterSensor_EmptySensorID(t *testing.T) {
 	strg := storage.NewMemorySensorStorage()
-	impl := NewStatusMonitorService(strg)
+	impl := NewQiVitalsService(strg)
 
 	req := &v1.RegisterSensorRequest{
 		Sensor: &v1.Sensor{
@@ -62,7 +62,7 @@ func TestRegisterSensor_EmptySensorID(t *testing.T) {
 
 func TestSendSensorData(t *testing.T) {
 	strg := storage.NewMemorySensorStorage()
-	impl := NewStatusMonitorService(strg)
+	impl := NewQiVitalsService(strg)
 
 	// Register first
 	sensor := &v1.Sensor{
@@ -103,7 +103,7 @@ func TestSendSensorData(t *testing.T) {
 
 func TestSendSensorData_NonExistent(t *testing.T) {
 	strg := storage.NewMemorySensorStorage()
-	impl := NewStatusMonitorService(strg)
+	impl := NewQiVitalsService(strg)
 
 	req := &v1.ReportSensorRequest{
 		Id:   "non-existent",
@@ -117,7 +117,7 @@ func TestSendSensorData_NonExistent(t *testing.T) {
 
 func TestQuerySensors(t *testing.T) {
 	strg := storage.NewMemorySensorStorage()
-	impl := NewStatusMonitorService(strg)
+	impl := NewQiVitalsService(strg)
 
 	// Register multiple sensors
 	for i := 1; i <= 5; i++ {
@@ -177,7 +177,7 @@ func TestQuerySensors(t *testing.T) {
 
 func TestQuerySensors_ById(t *testing.T) {
 	strg := storage.NewMemorySensorStorage()
-	impl := NewStatusMonitorService(strg)
+	impl := NewQiVitalsService(strg)
 
 	// Register sensors
 	sensors := []*v1.Sensor{
@@ -236,7 +236,7 @@ func TestQuerySensors_ById(t *testing.T) {
 
 func TestQuerySensors_ByLabels(t *testing.T) {
 	strg := storage.NewMemorySensorStorage()
-	impl := NewStatusMonitorService(strg)
+	impl := NewQiVitalsService(strg)
 
 	// Register sensors with different labels
 	sensors := []*v1.Sensor{
@@ -378,7 +378,7 @@ func TestStatusCalculation(t *testing.T) {
 
 func TestRegisterSensor_InvalidPeriods(t *testing.T) {
 	strg := storage.NewMemorySensorStorage()
-	impl := NewStatusMonitorService(strg)
+	impl := NewQiVitalsService(strg)
 
 	tests := []struct {
 		name        string
@@ -435,7 +435,7 @@ func TestRegisterSensor_InvalidPeriods(t *testing.T) {
 
 func TestPatchSensor(t *testing.T) {
 	strg := storage.NewMemorySensorStorage()
-	impl := NewStatusMonitorService(strg)
+	impl := NewQiVitalsService(strg)
 	ctx := context.Background()
 
 	// Initial Seed Data
@@ -695,6 +695,237 @@ func TestPatchSensor(t *testing.T) {
 			assert.Equal(t, resp.Sensor.Spec.GracefulPeriodSeconds, persistedState.Info.GracefulPeriod)
 			assert.Equal(t, resp.Sensor.Spec.FailurePeriodSeconds, persistedState.Info.FailurePeriod)
 			assert.Equal(t, resp.Sensor.Spec.Rules, persistedState.Info.ConditionRules)
+		})
+	}
+}
+
+func TestResolveIdentity_ByNaturalKey(t *testing.T) {
+	strg := storage.NewMemorySensorStorage()
+	impl := NewQiVitalsService(strg)
+	ctx := context.Background()
+
+	// 1. Register a sensor
+	sensor := &v1.Sensor{
+		Metadata: &v1.ObjectMeta{
+			Id:        "sens-nat-1",
+			Name:      "MySensor",
+			Namespace: "prod",
+		},
+		Spec: &v1.SensorSpec{GracefulPeriodSeconds: 60},
+	}
+	_, err := impl.RegisterSensor(ctx, &v1.RegisterSensorRequest{Sensor: sensor})
+	require.NoError(t, err)
+
+	// 2. Resolve identity using Name + Namespace
+	identity, err := impl.ResolveIdentity(ctx, "", "MySensor", "prod")
+	require.NoError(t, err)
+	assert.Equal(t, "sens-nat-1", identity.ID)
+	assert.Equal(t, "MySensor", identity.Name)
+	assert.Equal(t, "prod", identity.Namespace)
+}
+
+func TestResolveIdentity_InvalidArguments(t *testing.T) {
+	strg := storage.NewMemorySensorStorage()
+	impl := NewQiVitalsService(strg)
+	ctx := context.Background()
+
+	// Empty arguments should fail
+	_, err := impl.ResolveIdentity(ctx, "", "", "")
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.InvalidArgument, st.Code())
+}
+
+func TestReportSensor_ByNaturalKey(t *testing.T) {
+	strg := storage.NewMemorySensorStorage()
+	impl := NewQiVitalsService(strg)
+	ctx := context.Background()
+
+	// Register
+	_, err := impl.RegisterSensor(ctx, &v1.RegisterSensorRequest{
+		Sensor: &v1.Sensor{
+			Metadata: &v1.ObjectMeta{
+				Name:      "NatKeySensor",
+				Namespace: "dev",
+			},
+			Spec: &v1.SensorSpec{GracefulPeriodSeconds: 60},
+		},
+	})
+	require.NoError(t, err)
+
+	// Report using Name + Namespace instead of ID
+	resp, err := impl.ReportSensor(ctx, &v1.ReportSensorRequest{
+		Name:      "NatKeySensor",
+		Namespace: "dev",
+		Data:      map[string]string{"status": "ok"},
+	})
+	require.NoError(t, err)
+	assert.NotNil(t, resp.Sensor)
+	assert.Equal(t, "ok", resp.Sensor.Status.ReportedData["status"])
+}
+
+func TestDeleteSensor_Basic(t *testing.T) {
+	strg := storage.NewMemorySensorStorage()
+	impl := NewQiVitalsService(strg)
+	ctx := context.Background()
+
+	_, err := impl.RegisterSensor(ctx, &v1.RegisterSensorRequest{
+		Sensor: &v1.Sensor{
+			Metadata: &v1.ObjectMeta{Id: "del-1", Name: "SensorOne"},
+			Spec:     &v1.SensorSpec{GracefulPeriodSeconds: 60},
+		},
+	})
+	require.NoError(t, err)
+
+	_, err = impl.DeleteSensor(ctx, &v1.DeleteSensorRequest{Id: "del-1"})
+	require.NoError(t, err)
+
+	// Verify it's gone
+	_, err = impl.ResolveIdentity(ctx, "del-1", "", "")
+	require.Error(t, err)
+}
+
+func TestDeleteSensor_NonExistent(t *testing.T) {
+	strg := storage.NewMemorySensorStorage()
+	impl := NewQiVitalsService(strg)
+	ctx := context.Background()
+
+	_, err := impl.DeleteSensor(ctx, &v1.DeleteSensorRequest{Id: "ghost"})
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.NotFound, st.Code())
+}
+
+func TestConditionParseError_MarksFailed(t *testing.T) {
+	strg := storage.NewMemorySensorStorage()
+	impl := NewQiVitalsService(strg)
+	ctx := context.Background()
+
+	// Register a sensor with intentionally malformed CEL syntax
+	sensor := &v1.Sensor{
+		Metadata: &v1.ObjectMeta{
+			Id:   "parse-err-sensor",
+			Name: "ParseErrorSensor",
+		},
+		Spec: &v1.SensorSpec{
+			GracefulPeriodSeconds: 60,
+			FailurePeriodSeconds:  120,
+			Rules: []*v1.ConditionRule{
+				{
+					Name:        "BadSyntax",
+					Expression:  `this is not valid CEL syntax @#$%`,
+					TargetState: "OK",
+				},
+			},
+		},
+	}
+	_, err := impl.RegisterSensor(ctx, &v1.RegisterSensorRequest{Sensor: sensor})
+	require.NoError(t, err)
+
+	// Report data to ensure we're within the graceful period
+	_, err = impl.ReportSensor(ctx, &v1.ReportSensorRequest{
+		Id:   "parse-err-sensor",
+		Data: map[string]string{},
+	})
+	require.NoError(t, err)
+
+	// Query and verify state
+	resp, err := impl.QuerySensors(ctx, &v1.QuerySensorsRequest{Id: "parse-err-sensor"})
+	require.NoError(t, err)
+	require.Len(t, resp.Sensors, 1)
+
+	assert.Equal(t, v1.SensorState_FAILED, resp.Sensors[0].Status.State,
+		"Sensor state must be FAILED when condition parsing fails")
+}
+
+func TestApplyConditionOverrides_SeverityPrecedence(t *testing.T) {
+	tests := []struct {
+		name          string
+		baseState     v1.SensorState
+		conditions    []*v1.Condition
+		rules         []*v1.ConditionRule
+		expectedState v1.SensorState
+	}{
+		{
+			name:          "Base FAILED trumps Condition OK",
+			baseState:     v1.SensorState_FAILED,
+			conditions:    []*v1.Condition{{Type: "HealthCheck", Status: "True"}},
+			rules:         []*v1.ConditionRule{{Name: "HealthCheck", TargetState: "OK"}},
+			expectedState: v1.SensorState_FAILED,
+		},
+		{
+			name:          "Base FAILED trumps Condition DEGRADED",
+			baseState:     v1.SensorState_FAILED,
+			conditions:    []*v1.Condition{{Type: "LatencyCheck", Status: "True"}},
+			rules:         []*v1.ConditionRule{{Name: "LatencyCheck", TargetState: "DEGRADED"}},
+			expectedState: v1.SensorState_FAILED,
+		},
+		{
+			name:          "Condition PAUSED trumps Base FAILED",
+			baseState:     v1.SensorState_FAILED,
+			conditions:    []*v1.Condition{{Type: "MaintenanceMode", Status: "True"}},
+			rules:         []*v1.ConditionRule{{Name: "MaintenanceMode", TargetState: "PAUSED"}},
+			expectedState: v1.SensorState_PAUSED,
+		},
+		{
+			name:          "Base DEGRADED trumps Condition OK",
+			baseState:     v1.SensorState_DEGRADED,
+			conditions:    []*v1.Condition{{Type: "HealthCheck", Status: "True"}},
+			rules:         []*v1.ConditionRule{{Name: "HealthCheck", TargetState: "OK"}},
+			expectedState: v1.SensorState_DEGRADED,
+		},
+		{
+			name:          "Condition FAILED trumps Base OK",
+			baseState:     v1.SensorState_OK,
+			conditions:    []*v1.Condition{{Type: "ErrorCheck", Status: "True"}},
+			rules:         []*v1.ConditionRule{{Name: "ErrorCheck", TargetState: "FAILED"}},
+			expectedState: v1.SensorState_FAILED,
+		},
+		{
+			name:      "Multiple Conditions: Max Severity Wins",
+			baseState: v1.SensorState_OK,
+			conditions: []*v1.Condition{
+				{Type: "LowPriority", Status: "True"},
+				{Type: "HighPriority", Status: "True"},
+			},
+			rules: []*v1.ConditionRule{
+				{Name: "LowPriority", TargetState: "DEGRADED"},
+				{Name: "HighPriority", TargetState: "FAILED"},
+			},
+			expectedState: v1.SensorState_FAILED,
+		},
+		{
+			name:          "Inactive Condition: Base State Preserved",
+			baseState:     v1.SensorState_DEGRADED,
+			conditions:    []*v1.Condition{{Type: "CriticalCheck", Status: "False"}},
+			rules:         []*v1.ConditionRule{{Name: "CriticalCheck", TargetState: "FAILED"}},
+			expectedState: v1.SensorState_DEGRADED,
+		},
+		{
+			name:          "Invalid TargetState: Ignored",
+			baseState:     v1.SensorState_OK,
+			conditions:    []*v1.Condition{{Type: "BadRule", Status: "True"}},
+			rules:         []*v1.ConditionRule{{Name: "BadRule", TargetState: "NONEXISTENT"}},
+			expectedState: v1.SensorState_OK,
+		},
+		{
+			name:          "Condition Error trumps Base OK",
+			baseState:     v1.SensorState_OK,
+			conditions:    []*v1.Condition{{Type: "BadCEL", Status: "Error", Message: "syntax error"}},
+			rules:         []*v1.ConditionRule{{Name: "BadCEL", TargetState: "DEGRADED"}},
+			expectedState: v1.SensorState_FAILED,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := &storage.SensorState{
+				Info: &storage.SensorInfo{ConditionRules: tt.rules},
+			}
+			result := applyConditionOverrides(tt.baseState, state, tt.conditions)
+			assert.Equal(t, tt.expectedState, result, "Severity precedence logic failed")
 		})
 	}
 }

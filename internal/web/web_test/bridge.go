@@ -20,7 +20,7 @@ func getRealQiVitalsClient(t *testing.T) (v1.QiVitalsServiceClient, *storage.Mem
 	t.Helper()
 
 	store := storage.NewMemorySensorStorage()
-	realService := server.NewStatusMonitorService(store)
+	realService := server.NewQiVitalsService(store)
 
 	l := bufconn.Listen(1024 * 1024)
 	grpcServer := grpc.NewServer()

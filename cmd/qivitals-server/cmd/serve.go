@@ -99,7 +99,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 		store = pgStore
 	}
 
-	qivitalsSvc := server.NewStatusMonitorService(store)
+	qivitalsSvc := server.NewQiVitalsService(store)
 	renderer := web.NewTemplateRenderer()
 
 	// Initialize individual handlers, passing the certificate file path for internal dialing

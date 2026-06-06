@@ -45,7 +45,7 @@ func TestPostgresStorageContract(t *testing.T) {
 	err = pgStorage.InitSchema(ctx)
 	require.NoError(t, err, "Failed to initialize database schema")
 
-	// 4. Define setup & teardown for each individual contract sub-test
+	// Define setup & teardown for each individual contract sub-test
 	setup := func() SensorStorage {
 		// Truncate the table so every test starts with a completely empty database
 		_, err := pool.Exec(ctx, "TRUNCATE TABLE sensors")
@@ -57,7 +57,8 @@ func TestPostgresStorageContract(t *testing.T) {
 		// Nothing specific to tear down per test, truncation handles it
 	}
 
-	// 5. Run the exact same test suite we used for MemoryStorage!
+	// Run the exact same test suite we used for MemoryStorage!
 	RunStorageContractTests(t, setup, teardown)
 	RunExtendedStorageContractTests(t, setup, teardown)
+	RunIdentityContractTests(t, setup, teardown)
 }

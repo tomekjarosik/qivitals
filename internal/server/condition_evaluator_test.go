@@ -46,11 +46,10 @@ func TestEvaluateConditions_EmptyInputs(t *testing.T) {
 		assert.Nil(t, result)
 	})
 
-	t.Run("nil rule in slice returns nil condition", func(t *testing.T) {
+	t.Run("nil rule in slice does not return i", func(t *testing.T) {
 		rules := []*v1.ConditionRule{nil}
 		result := evaluator.EvaluateConditions(context.Background(), rules, map[string]string{}, map[string]string{})
-		require.Len(t, result, 1)
-		assert.Nil(t, result[0])
+		require.Len(t, result, 0)
 	})
 
 	t.Run("empty reported data with label-only rule", func(t *testing.T) {

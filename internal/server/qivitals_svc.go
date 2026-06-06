@@ -19,7 +19,7 @@ type QiVitalsService struct {
 	conditionEvaluator *ConditionEvaluator
 }
 
-func NewStatusMonitorService(storage storage.SensorStorage) *QiVitalsService {
+func NewQiVitalsService(storage storage.SensorStorage) *QiVitalsService {
 	conditionEvaluator, err := NewConditionEvaluator()
 	if err != nil {
 		log.Fatalf("Warning: Failed to initialize CEL evaluator: %v", err)
@@ -78,23 +78,40 @@ func (s *QiVitalsService) evaluateConditions(ctx context.Context, state *storage
 	)
 }
 
-func (s *QiVitalsService) ReportSensor(ctx context.Context, req *v1.ReportSensorRequest) (*v1.ReportSensorResponse, error) {
-	// First resolve ID if natural key was used
-	targetID := req.Id
-	if targetID == "" && req.Namespace != "" && req.Name != "" {
-		res, err := s.storage.Query(ctx, storage.QueryFilter{Namespace: req.Namespace, Name: req.Name, Limit: 1})
-		if err != nil || len(res) == 0 {
-			return nil, status.Errorf(codes.NotFound, "sensor not found")
-		}
-		targetID = res[0].Info.ID
+func (s *QiVitalsService) ResolveIdentity(ctx context.Context, id, name, namespace string) (*storage.SensorIdentity, error) {
+	var identity *storage.SensorIdentity
+	var err error
+
+	if id != "" {
+		identity, err = s.storage.GetIdentity(ctx, id)
+	} else if name != "" && namespace != "" {
+		identity, err = s.storage.FindIdentity(ctx, namespace, name)
+	} else {
+		return nil, status.Error(codes.InvalidArgument, "either id or name+namespace must be provided")
 	}
 
-	if err := s.storage.SendData(ctx, targetID, req.Data); err != nil {
+	if err != nil {
+		// Normalize storage errors to gRPC errors
+		if errors.Is(err, storage.ErrSensorNotFound) {
+			return nil, status.Error(codes.NotFound, "sensor not found")
+		}
 		return nil, err
 	}
 
-	// Fetch updated state to return to client
-	state, err := s.storage.GetStatus(ctx, targetID)
+	return identity, nil
+}
+
+func (s *QiVitalsService) ReportSensor(ctx context.Context, req *v1.ReportSensorRequest) (*v1.ReportSensorResponse, error) {
+	sensorIdentity, err := s.ResolveIdentity(ctx, req.Id, req.Name, req.Namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.storage.SendData(ctx, sensorIdentity.ID, req.Data); err != nil {
+		return nil, err
+	}
+
+	state, err := s.storage.GetStatus(ctx, sensorIdentity.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -104,9 +121,14 @@ func (s *QiVitalsService) ReportSensor(ctx context.Context, req *v1.ReportSensor
 }
 
 func (s *QiVitalsService) DeleteSensor(ctx context.Context, req *v1.DeleteSensorRequest) (*v1.DeleteSensorResponse, error) {
-	if err := s.storage.Delete(ctx, req.Id); err != nil {
+	identity, err := s.ResolveIdentity(ctx, req.Id, "", "")
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.storage.Delete(ctx, identity.ID); err != nil {
 		if errors.Is(err, storage.ErrSensorNotFound) {
-			return nil, err // Returning gRPC error is standard
+			return nil, status.Error(codes.NotFound, "sensor not found")
 		}
 		return nil, err
 	}
@@ -175,28 +197,8 @@ func (s *QiVitalsService) QuerySensors(ctx context.Context, req *v1.QuerySensors
 // --- Helpers ---
 
 func buildProtoSensor(state *storage.SensorState, conditions []*v1.Condition) *v1.Sensor {
-	computedState := calculateSensorStatus(state)
-
-	if len(conditions) > 0 {
-		for _, cond := range conditions {
-			if cond.Status == "True" {
-				// Find the matching rule's target_state
-				for _, rule := range state.Info.ConditionRules {
-					if rule.Name == cond.Type {
-						if rule.TargetState != "" {
-							if stateVal, ok := v1.SensorState_value[rule.TargetState]; ok {
-								computedState = v1.SensorState(stateVal)
-							} else {
-								// TODO: handle unknown state
-							}
-						}
-						break
-					}
-				}
-				break // Only apply the first matching condition
-			}
-		}
-	}
+	baseState := calculateSensorStatus(state)
+	finalState := applyConditionOverrides(baseState, state, conditions)
 
 	return &v1.Sensor{
 		Metadata: &v1.ObjectMeta{
@@ -213,7 +215,7 @@ func buildProtoSensor(state *storage.SensorState, conditions []*v1.Condition) *v
 			Rules:                 state.Info.ConditionRules,
 		},
 		Status: &v1.SensorStatus{
-			State:                 computedState,
+			State:                 finalState,
 			LastReportedTimestamp: state.LastReportedAt,
 			ReportedData:          state.ReportedData,
 			Conditions:            conditions,
@@ -243,4 +245,39 @@ func calculateSensorStatus(state *storage.SensorState) v1.SensorState {
 	}
 
 	return v1.SensorState_FAILED
+}
+
+// applyConditionOverrides evaluates active conditions and merges them with the base state.
+// The final state is determined by the highest severity value (higher enum = more severe).
+func applyConditionOverrides(baseState v1.SensorState, state *storage.SensorState, conditions []*v1.Condition) v1.SensorState {
+	finalState := baseState
+
+	for _, cond := range conditions {
+		// Evaluation/parse errors force FAILED (trumps OK/DEGRADED, but respects PAUSED)
+		if cond.Status == "Error" || cond.Status == "Unknown" {
+			if v1.SensorState_FAILED > finalState {
+				finalState = v1.SensorState_FAILED
+			}
+			continue
+		}
+
+		if cond.Status != "True" {
+			continue
+		}
+
+		for _, rule := range state.Info.ConditionRules {
+			if rule.Name == cond.Type && rule.TargetState != "" {
+				if stateVal, ok := v1.SensorState_value[rule.TargetState]; ok {
+					conditionState := v1.SensorState(stateVal)
+					// Higher enum values represent more severe states and take precedence
+					if conditionState > finalState {
+						finalState = conditionState
+					}
+				}
+				break
+			}
+		}
+	}
+
+	return finalState
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -311,4 +312,52 @@ func sanitizeOrderBy(column string, descending bool) (string, error) {
 		direction = "DESC"
 	}
 	return fmt.Sprintf("%s %s", col, direction), nil
+}
+
+func (p *PostgresSensorStorage) GetIdentity(ctx context.Context, sensorID string) (*SensorIdentity, error) {
+	query, args, err := p.sq.Select("id", "namespace", "name").
+		From("sensors").
+		Where(squirrel.Eq{"id": sensorID}).
+		ToSql()
+	if err != nil {
+		return nil, err
+	}
+
+	var identity SensorIdentity
+	err = p.pool.QueryRow(ctx, query, args...).Scan(
+		&identity.ID,
+		&identity.Namespace,
+		&identity.Name,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrSensorNotFound
+		}
+		return nil, err
+	}
+	return &identity, nil
+}
+
+func (p *PostgresSensorStorage) FindIdentity(ctx context.Context, namespace, name string) (*SensorIdentity, error) {
+	query, args, err := p.sq.Select("id", "namespace", "name").
+		From("sensors").
+		Where(squirrel.Eq{"namespace": namespace, "name": name}).
+		ToSql()
+	if err != nil {
+		return nil, err
+	}
+
+	var identity SensorIdentity
+	err = p.pool.QueryRow(ctx, query, args...).Scan(
+		&identity.ID,
+		&identity.Namespace,
+		&identity.Name,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrSensorNotFound
+		}
+		return nil, err
+	}
+	return &identity, nil
 }

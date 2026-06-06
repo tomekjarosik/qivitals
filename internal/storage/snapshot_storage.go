@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -65,15 +66,12 @@ func (s *SnapshotStorage) runSnapshotLoop() {
 }
 
 func (s *SnapshotStorage) takeSnapshot() error {
-	// We use the 'Query' method of the underlying storage to get all data
-	// We use an empty filter to get everything
 	ctx := context.Background()
 	states, err := s.underlying.Query(ctx, QueryFilter{})
 	if err != nil {
 		return err
 	}
 
-	// Convert []SensorState to a map for cleaner JSON structure
 	dataMap := make(map[string]*SensorState)
 	for _, state := range states {
 		if state.Info != nil {
@@ -81,14 +79,20 @@ func (s *SnapshotStorage) takeSnapshot() error {
 		}
 	}
 
-	// Write to temp file first (Atomic Write pattern)
-	tmpFile := s.filePath + ".tmp"
-	bytes, err := json.MarshalIndent(dataMap, "", "  ")
+	newBytes, err := json.MarshalIndent(dataMap, "", "  ")
 	if err != nil {
 		return err
 	}
 
-	if err := os.WriteFile(tmpFile, bytes, 0644); err != nil {
+	// Avoid unnecessary disk writes if the content hasn't changed
+	existingBytes, err := os.ReadFile(s.filePath)
+	if err == nil && bytes.Equal(newBytes, existingBytes) {
+		return nil
+	}
+
+	// Atomic write: write to temp file first, then rename
+	tmpFile := s.filePath + ".tmp"
+	if err := os.WriteFile(tmpFile, newBytes, 0644); err != nil {
 		return err
 	}
 
@@ -145,4 +149,12 @@ func (s *SnapshotStorage) GetStatus(ctx context.Context, sensorID string) (*Sens
 
 func (s *SnapshotStorage) Query(ctx context.Context, filter QueryFilter) ([]*SensorState, error) {
 	return s.underlying.Query(ctx, filter)
+}
+
+func (s *SnapshotStorage) GetIdentity(ctx context.Context, sensorID string) (*SensorIdentity, error) {
+	return s.underlying.GetIdentity(ctx, sensorID)
+}
+
+func (s *SnapshotStorage) FindIdentity(ctx context.Context, namespace, name string) (*SensorIdentity, error) {
+	return s.underlying.FindIdentity(ctx, namespace, name)
 }

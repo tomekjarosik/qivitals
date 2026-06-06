@@ -246,3 +246,38 @@ func (m *MemorySensorStorage) Delete(ctx context.Context, sensorID string) error
 	delete(m.sensors, sensorID)
 	return nil
 }
+
+// GetIdentity retrieves only the identity metadata for a sensor by ID.
+func (m *MemorySensorStorage) GetIdentity(ctx context.Context, sensorID string) (*SensorIdentity, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	state, exists := m.sensors[sensorID]
+	if !exists {
+		return nil, ErrSensorNotFound
+	}
+
+	return &SensorIdentity{
+		ID:        state.Info.ID,
+		Name:      state.Info.Name,
+		Namespace: state.Info.Namespace,
+	}, nil
+}
+
+// FindIdentity retrieves sensor identity by unique Name and Namespace combination.
+func (m *MemorySensorStorage) FindIdentity(ctx context.Context, namespace, name string) (*SensorIdentity, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	for _, state := range m.sensors {
+		if state.Info.Namespace == namespace && state.Info.Name == name {
+			return &SensorIdentity{
+				ID:        state.Info.ID,
+				Name:      state.Info.Name,
+				Namespace: state.Info.Namespace,
+			}, nil
+		}
+	}
+
+	return nil, ErrSensorNotFound
+}

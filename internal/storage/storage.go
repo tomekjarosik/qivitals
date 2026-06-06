@@ -10,11 +10,12 @@ import (
 // SensorStatusType represents the current state of a sensor
 type SensorStatusType string
 
-const (
-	StatusActive   SensorStatusType = "OK"
-	StatusDegraded SensorStatusType = "DEGRADED"
-	StatusDead     SensorStatusType = "DEAD"
-)
+// SensorIdentity holds the minimal metadata required for lookup and authorization.
+type SensorIdentity struct {
+	ID        string
+	Name      string
+	Namespace string
+}
 
 // SensorInfo contains all information about a registered sensor
 type SensorInfo struct {
@@ -79,4 +80,12 @@ type SensorStorage interface {
 
 	// Query returns all sensors matching the broader filter criteria
 	Query(ctx context.Context, filter QueryFilter) ([]*SensorState, error)
+
+	// GetIdentity retrieves only the identity metadata for a sensor by ID.
+	// Optimized for authorization checks; does not fetch full specs or reported data.
+	GetIdentity(ctx context.Context, sensorID string) (*SensorIdentity, error)
+
+	// FindIdentity retrieves sensor identity by unique Name and Namespace combination.
+	// Optimized for authorization checks; does not fetch full specs or reported data.
+	FindIdentity(ctx context.Context, namespace, name string) (*SensorIdentity, error)
 }

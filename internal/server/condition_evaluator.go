@@ -17,9 +17,11 @@ import (
 
 // ConditionEvaluator handles CEL expression evaluation for sensor conditions.
 type ConditionEvaluator struct {
-	mu     sync.RWMutex
-	env    *cel.Env
-	cached map[string]cel.Program
+	mu           sync.RWMutex
+	env          *cel.Env
+	cached       map[string]cel.Program
+	templates    map[string]*template.Template
+	maxCacheSize int
 }
 
 // NewConditionEvaluator creates a new CEL evaluator with sensor-specific functions.
@@ -48,8 +50,10 @@ func NewConditionEvaluator() (*ConditionEvaluator, error) {
 	}
 
 	return &ConditionEvaluator{
-		env:    celEnv,
-		cached: make(map[string]cel.Program),
+		env:          celEnv,
+		cached:       make(map[string]cel.Program),
+		templates:    make(map[string]*template.Template),
+		maxCacheSize: 1000, // Prevent unbounded memory growth
 	}, nil
 }
 
@@ -66,6 +70,9 @@ func (e *ConditionEvaluator) EvaluateConditions(
 
 	conditions := make([]*v1.Condition, 0, len(rules))
 	for _, rule := range rules {
+		if rule == nil {
+			continue
+		}
 		conditions = append(conditions, e.evaluateSingleRule(rule, reportedData, labels))
 	}
 	return conditions
@@ -137,13 +144,44 @@ func (e *ConditionEvaluator) evaluateSingleRule(
 	}
 }
 
-// formatMessage formats the message template with the reported data using Go templating.
+// getTemplate safely parses and caches Go templates to avoid repeated regex overhead.
+func (e *ConditionEvaluator) getTemplate(tmplStr string) (*template.Template, error) {
+	e.mu.RLock()
+	if t, ok := e.templates[tmplStr]; ok {
+		e.mu.RUnlock()
+		return t, nil
+	}
+	e.mu.RUnlock()
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if t, ok := e.templates[tmplStr]; ok {
+		return t, nil
+	}
+
+	// Evict oldest entry if cache is full (simple LRU-ish behavior by dropping random old keys)
+	if len(e.templates) >= e.maxCacheSize {
+		for k := range e.templates {
+			delete(e.templates, k)
+			break
+		}
+	}
+
+	t, err := template.New("condition_msg").Parse(tmplStr)
+	if err != nil {
+		return nil, err
+	}
+	e.templates[tmplStr] = t
+	return t, nil
+}
+
+// formatMessage formats the message template with the reported data.
 func (e *ConditionEvaluator) formatMessage(templateStr string, reportedData map[string]string) string {
 	if templateStr == "" {
 		return ""
 	}
 
-	tmpl, err := template.New("condition_msg").Parse(templateStr)
+	tmpl, err := e.getTemplate(templateStr)
 	if err != nil {
 		return fmt.Sprintf("Error formatting message: %v", err)
 	}
@@ -152,7 +190,7 @@ func (e *ConditionEvaluator) formatMessage(templateStr string, reportedData map[
 	if err := tmpl.Execute(&buf, map[string]map[string]string{
 		"reported_data": reportedData,
 	}); err != nil {
-		return templateStr // Return original template on error
+		return templateStr
 	}
 	return buf.String()
 }
