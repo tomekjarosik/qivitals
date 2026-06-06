@@ -72,6 +72,72 @@
             const row = btn.closest('.rule-row');
             if (row) row.remove();
         }
+        document.addEventListener('DOMContentLoaded', () => {
+            
+            function parseHumanToSeconds(timeStr) {
+                
+                if (/^\d+$/.test(timeStr.trim())) {
+                    return parseInt(timeStr, 10);
+                }
+
+                const regex = /(\d+)\s*(s|m|h|d)/g;
+                let seconds = 0;
+                let match;
+                let foundMatch = false;
+
+                while ((match = regex.exec(timeStr.toLowerCase())) !== null) {
+                    foundMatch = true;
+                    const val = parseInt(match[1], 10);
+                    const unit = match[2];
+
+                    if (unit === 's') seconds += val;
+                    if (unit === 'm') seconds += val * 60;
+                    if (unit === 'h') seconds += val * 3600;
+                    if (unit === 'd') seconds += val * 86400;
+                }
+
+                
+                return foundMatch ? seconds : '';
+            }
+
+            function secondsToHuman(seconds) {
+                if (!seconds || isNaN(seconds)) return "0s";
+                const d = Math.floor(seconds / 86400);
+                const h = Math.floor((seconds % 86400) / 3600);
+                const m = Math.floor((seconds % 3600) / 60);
+                const s = seconds % 60;
+
+                let parts = [];
+                if (d > 0) parts.push(`${d}d`);
+                if (h > 0) parts.push(`${h}h`);
+                if (m > 0) parts.push(`${m}m`);
+                if (s > 0) parts.push(`${s}s`);
+
+                return parts.join(' ');
+            }
+
+            
+            const timeInputs = document.querySelectorAll('.time-input');
+
+            timeInputs.forEach(input => {
+                const currentVal = parseInt(input.value, 10);
+                if (!isNaN(currentVal) && currentVal > 0) {
+                    input.value = secondsToHuman(currentVal);
+                }
+                input.addEventListener('input', (e) => {
+                    const rawValue = e.target.value;
+                    const targetId = e.target.getAttribute('data-target');
+                    const hiddenInput = document.getElementById(targetId);
+
+                    const seconds = parseHumanToSeconds(rawValue);
+
+                    if (hiddenInput) {
+                        
+                        hiddenInput.value = seconds;
+                    }
+                });
+            });
+        });
     </script>
 </head>
 <body class="bg-gradient-to-br from-slate-50 to-indigo-50/50 min-h-screen font-sans antialiased text-slate-800">
@@ -120,16 +186,33 @@
         <section class="bg-white/90 backdrop-blur rounded-xl border border-slate-200/70 p-6 shadow-sm">
             <h2 class="text-lg font-semibold text-slate-800 mb-4">Spec</h2>
             <div class="grid grid-cols-2 gap-4">
+
                 <div>
-                    <label class="block text-sm font-medium text-slate-600 mb-1">Graceful Period (seconds)</label>
-                    <input type="number" name="graceful_period_seconds" value="60"
-                           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                    <label class="block text-sm font-medium text-slate-600 mb-1">Graceful Period</label>
+                    <input type="text"
+                           value="60"
+                           placeholder="e.g., 5m, 1h 30m"
+                           class="time-input w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                           data-target="graceful_hidden">
+                    <input type="hidden"
+                           name="graceful_period_seconds"
+                           id="graceful_hidden"
+                           value="60">
                 </div>
+
                 <div>
-                    <label class="block text-sm font-medium text-slate-600 mb-1">Failure Period (seconds)</label>
-                    <input type="number" name="failure_period_seconds" value="120"
-                           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                    <label class="block text-sm font-medium text-slate-600 mb-1">Failure Period</label>
+                    <input type="text"
+                           value="120"
+                           placeholder="e.g., 5m, 1h 30m"
+                           class="time-input w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                           data-target="failure_hidden">
+                    <input type="hidden"
+                           name="failure_period_seconds"
+                           id="failure_hidden"
+                           value="120">
                 </div>
+
             </div>
             <p class="text-xs text-slate-400 mt-2">Thresholds determine when the sensor becomes DEGRADED or DEAD.</p>
         </section>
@@ -170,15 +253,16 @@
                 <div>
                     <span class="block text-sm font-medium text-slate-600 mb-1">State</span>
                     <div class="flex items-center gap-2">
-                        <span class="h-2.5 w-2.5 mt-0.5 rounded-full flex-shrink-0 ring-2 bg-emerald-500 ring-emerald-100"></span>
+                        
+<span class="h-2.5 w-2.5 mt-0.5 rounded-full flex-shrink-0 ring-2 bg-emerald-500 ring-emerald-100"></span>
 
                     </div>
                 </div>
                 <div>
                     <span class="text-sm text-slate-800">
                     
-                        <span class="whitespace-nowrap format-timestamp" data-ts="1780605841">
-                            1780605841
+                        <span class="whitespace-nowrap format-timestamp" data-ts="1780759025">
+                            1780759025
                         </span>
                     
                     </span>

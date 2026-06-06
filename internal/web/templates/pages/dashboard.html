@@ -24,7 +24,10 @@
             }
         });
         document.body.addEventListener('htmx:afterSwap', function(evt) {
-            if (evt.detail.target.id === 'sensor-grid-container') formatTimestamps();
+            if (evt.detail.target.id === 'sensor-grid-container') {
+                formatTimestamps();
+                document.getElementById('last-refresh').textContent = new Date().toLocaleTimeString();
+            }
         });
         function formatTimestamps() {
             document.querySelectorAll('.format-timestamp').forEach(el => {
@@ -76,7 +79,7 @@
         </div>
         <div class="flex items-center gap-4 mt-4 sm:mt-0">
             <span class="text-xs text-slate-500 bg-white/80 backdrop-blur px-3 py-1.5 rounded-full shadow-sm">
-                ⏱️ {{ .Now }}
+                ⏱️ Last refresh: <span id="last-refresh">—</span>
             </span>
             <!-- Renamed to "Filters" with toggle behavior -->
             <button type="button"
@@ -128,7 +131,7 @@
 
     <div id="sensor-grid-container"
          hx-get="{{ .FullURL }}"
-         hx-trigger="every 2s"
+         hx-trigger="every 10s"
          hx-swap="innerHTML">
         {{template "sensor-grid" .SensorGrid}}
     </div>
